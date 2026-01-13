@@ -71,10 +71,8 @@
       cursor: pointer;
       font-weight: 600;
       transition: all 0.2s;
-      
-      /* Fixed layout overrides */
-      flex: none; /* Prevent growing to half width */
-      width: 140px; /* Approx 1/3rd of window */
+      flex: none; 
+      width: 140px; 
       text-align: center;
       white-space: nowrap;
       overflow: hidden;
@@ -163,7 +161,6 @@
         font-size: 12px;
         outline: none;
     }
-    select:focus, input:focus { border-color: var(--primary); }
 
     /* --- Options Grid --- */
     .options-container {
@@ -196,7 +193,6 @@
         overflow-y: auto;
     }
     
-    /* Custom Scrollbar */
     .attributes-grid::-webkit-scrollbar { width: 6px; }
     .attributes-grid::-webkit-scrollbar-track { background: transparent; }
     .attributes-grid::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -231,9 +227,6 @@
         height: 15px;
         cursor: pointer;
     }
-    
-    .checkbox-item label { cursor: pointer; user-select: none; }
-    .checkbox-item input:disabled + label { color: #cbd5e1; cursor: not-allowed; }
 
     /* --- Actions --- */
     .btn-group { display: flex; gap: 10px; margin-bottom: 12px; }
@@ -246,7 +239,7 @@
       font-size: 13px;
       cursor: pointer;
       transition: all 0.2s;
-      flex: 1; /* Global flex:1 makes buttons fill available width */
+      flex: 1; 
     }
     
     #scanBtn {
@@ -523,6 +516,7 @@
     <div class="signature">Created by TransFamesh</div>
   </div>
 
-  <script src="popup.js"></script>
+  <!-- Note: type="module" allows the imports to work -->
+  <script type="module" src="popup.js"></script>
 </body>
 </html>
