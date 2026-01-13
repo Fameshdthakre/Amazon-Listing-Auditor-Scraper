@@ -1,2 +1,3 @@
-# Amazon-Listing-Auditor-Scraper
-Professional auditing tool for Amazon Agencies, Sellers and Vendors. Features Multi-marketplace support, LQS scoring, and stock/delivery audits.
+# Listing-Auditor-for-Amazon
+
+Professional auditing tool for Amazon Sellers & Agencies. Features LQS, stock/delivery audits, and multi-marketplace support.
