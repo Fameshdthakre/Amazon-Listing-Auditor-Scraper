@@ -43,12 +43,19 @@
     
     h2 {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px; /* Slightly smaller for better fit */
       font-weight: 700;
       color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+
+    .app-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      object-fit: contain;
     }
 
     .badge {
@@ -61,29 +68,69 @@
       letter-spacing: 0.5px;
     }
 
+    /* Auth Buttons Container */
+    .auth-actions {
+        display: flex;
+        gap: 8px;
+    }
+
     .auth-btn {
-      font-size: 12px;
+      font-size: 11px;
       padding: 6px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--surface);
-      color: var(--primary);
+      border-radius: 4px;
       cursor: pointer;
       font-weight: 600;
       transition: all 0.2s;
-      
-      /* Fixed layout overrides */
-      flex: none; /* Prevent growing to half width */
-      width: 140px; /* Approx 1/3rd of window */
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid transparent;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.05);
     }
-    .auth-btn:hover {
-      background: #eff6ff;
-      border-color: #bfdbfe;
+    
+    /* Google Pro Style */
+    .btn-google { 
+      background: #ffffff; 
+      color: #3c4043;
+      border-color: #dadce0;
+      font-family: 'Roboto', sans-serif;
     }
+    .btn-google:hover { 
+      background: #f7f8f8; 
+      border-color: #d2e3fc;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.1);
+    }
+    .btn-google span {
+        font-weight: 700;
+        font-size: 14px;
+        color: #4285F4; /* Google Blue */
+    }
+
+    /* Microsoft Pro Style */
+    .btn-microsoft { 
+        background: #2f2f2f; 
+        color: #ffffff;
+        border-color: #2f2f2f;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    .btn-microsoft:hover { 
+        background: #3e3e3e; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    .btn-microsoft span {
+        font-weight: 700;
+        font-size: 14px;
+        color: #00a4ef; /* Microsoft Blue */
+    }
+    
+    .btn-logout {
+        border-color: #fecaca;
+        color: var(--danger);
+        background: #fef2f2;
+        display: none; /* Hidden by default */
+        box-shadow: none;
+    }
+    .btn-logout:hover { background: #fee2e2; }
 
     /* --- Tabs --- */
     .mode-tabs {
@@ -366,14 +413,40 @@
         padding-top: 8px;
         border-top: 1px solid var(--border);
     }
+    
+    .signature a {
+        color: var(--primary);
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 600;
+        margin-left: 8px;
+        padding-left: 8px;
+        border-left: 1px solid var(--border);
+    }
+    .signature a:hover {
+        text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <div class="app-container">
     <!-- Header -->
     <div class="top-bar">
-        <h2>Listing Auditor for Amazon <span class="badge">v1.0.1</span></h2>
-        <button id="loginBtn" class="auth-btn">Login / Sign Up</button>
+        <h2>
+            <img src="icon48.png" class="app-logo" alt="Logo">
+            Listing Auditor <span class="badge">v1.0.3</span>
+        </h2>
+        
+        <!-- Auth Buttons -->
+        <div class="auth-actions" id="authActions">
+            <button id="googleBtn" class="auth-btn btn-google">
+                <span>G</span> Google
+            </button>
+            <button id="msBtn" class="auth-btn btn-microsoft">
+                <span>M</span> Microsoft
+            </button>
+            <button id="logoutBtn" class="auth-btn btn-logout">Logout</button>
+        </div>
     </div>
     
     <!-- Navigation Tabs -->
@@ -461,8 +534,8 @@
         
         <!-- DELIVERY DATES -->
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="freeDeliveryDate" checked disabled> Free Delivery</label></div>
-        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="primeDeliveryDate" checked disabled> Prime Delivery</label></div>
-        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="fastestDeliveryDate" checked disabled> Fastest Delivery</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="paidDeliveryDate" checked disabled> Paid Delivery</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="primeOrFastestDeliveryDate" checked disabled> Prime / Fastest</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox" value="deliveryLocation" checked> Delivery Location</label></div>
 
         <!-- AUDITOR FLAGS & CONTENT -->
@@ -471,6 +544,7 @@
             <span class="lock-icon">🔒</span>
         </div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="hasBullets" checked disabled> Has Bullet Points?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="bulletsCount" checked disabled> Bullet Count</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="bullets" checked disabled> Bullet Points</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="hasDescription" checked disabled> Has Description?</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="description" checked disabled> Description</label></div>
@@ -521,7 +595,9 @@
     <button id="copyBtn" class="action-btn">Copy JSON Data</button>
     <button id="downloadBtn" class="action-btn">Download CSV Report</button>
 
-    <div class="signature">Created by TransFamesh</div>
+    <div class="signature">
+        Created with ❤️ by TransFamesh <a id="feedbackLink">Feedback & Suggestions</a>
+    </div>
   </div>
 
   <script src="popup.js"></script>

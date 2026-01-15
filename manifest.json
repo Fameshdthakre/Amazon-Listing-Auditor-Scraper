@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Listing Auditor for Amazon",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Professional auditing tool for Amazon Sellers & Agencies. Features LQS, stock/delivery audits, and multi-marketplace support.",
   "permissions": [
     "tabs",
