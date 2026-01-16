@@ -35,13 +35,13 @@
     }
 
     const pageSource = document.documentElement.outerHTML;
+    const scripts = document.querySelectorAll('script');
 
     // --- 3. Extract Attributes ---
 
     // 3.0. GOLD MINE STRATEGY
     let goldMine = null;
     try {
-        const scripts = document.querySelectorAll('script');
         for (let script of scripts) {
             const content = script.textContent || "";
             if (content.includes('jQuery.parseJSON') && (content.includes('colorToAsin') || content.includes('mediaAsin'))) {
@@ -58,7 +58,6 @@
     // 3.0.1 IMAGE BLOCK STRATEGY
     let imagesFromData = null;
     try {
-        const scripts = document.querySelectorAll('script');
         for (let script of scripts) {
             const content = script.textContent || "";
             if (content.includes("colorImages") && content.includes("initial")) {
@@ -137,8 +136,7 @@
         variationTheme = dimMatch ? dimMatch[1] : "none";
         const countMatch = pageSource.match(/"num_total_variations"\s*:\s*(\d+)/);
         variationCount = countMatch ? countMatch[1] : "none";
-        const scriptScripts = document.querySelectorAll('script');
-        for (let script of scriptScripts) {
+        for (let script of scripts) {
           if (script.textContent && script.textContent.includes('dimensionValuesDisplayData')) {
             const vMatch = script.textContent.match(/"dimensionValuesDisplayData"\s*:\s*(\{.*?\})\s*,/);
             if (vMatch) {
