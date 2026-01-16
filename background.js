@@ -7,15 +7,14 @@ const INITIAL_STATE = {
   results: [],
   processedCount: 0,
   currentBatchIndex: 0,
-  batchTabIds: [],      // Store IDs of tabs currently open
+  batchTabIds: [],      
   settings: { disableImages: false },
   statusMessage: "Ready.",
-  nextActionTime: null  // For UI Countdown
+  nextActionTime: null 
 };
 
 // --- Event Listeners ---
 
-// 1. Message Handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'START_SCAN') {
     startScan(request.payload).then(() => sendResponse({ status: 'started' }));
@@ -25,9 +24,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     stopScan().then(() => sendResponse({ status: 'stopped' }));
     return true;
   }
+  else if (request.action === 'CLEAR_DATA') {
+    clearData().then(() => sendResponse({ status: 'cleared' }));
+    return true;
+  }
 });
 
-// 2. Alarm Handling (The Engine)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   const data = await chrome.storage.local.get('auditState');
   const state = data.auditState;
@@ -65,20 +67,16 @@ async function startScan(payload) {
     });
   }
 
-  // Trigger first batch immediately (or with tiny delay to allow UI update)
   createAlarm('BATCH_OPEN', 100); 
 }
 
 async function stopScan() {
-  // 1. Clear Alarms
   await chrome.alarms.clearAll();
 
-  // 2. Load State to close tabs
   const data = await chrome.storage.local.get('auditState');
   const state = data.auditState;
 
   if (state) {
-    // Close any tabs that were left open
     if (state.batchTabIds && state.batchTabIds.length > 0) {
       try { await chrome.tabs.remove(state.batchTabIds); } catch(e) {}
     }
@@ -90,14 +88,31 @@ async function stopScan() {
     await chrome.storage.local.set({ auditState: state });
   }
 
-  // 3. Reset Settings
   await chrome.contentSettings.images.set({
     primaryPattern: '*://*.amazon.com/*',
     setting: 'allow'
   });
 }
 
-// Phase 1: Open Tabs
+async function clearData() {
+  const data = await chrome.storage.local.get('auditState');
+  let currentState = data.auditState || { ...INITIAL_STATE };
+
+  const clearedState = {
+    ...currentState,
+    isScanning: false,
+    urlsToProcess: [],
+    results: [],
+    processedCount: 0,
+    currentBatchIndex: 0,
+    batchTabIds: [],
+    statusMessage: "Results cleared. Ready.",
+    nextActionTime: null
+  };
+
+  await chrome.storage.local.set({ auditState: clearedState });
+}
+
 async function openBatchTabs(state) {
   const total = state.urlsToProcess.length;
   
@@ -106,41 +121,39 @@ async function openBatchTabs(state) {
     return;
   }
 
-  // 1. Determine Batch Size
-  let currentBatchSize = getRandomDivisible(10, 30, 5); // Max 30 as requested
+  let currentBatchSize = getRandomDivisible(10, 30, 5); 
   if (state.processedCount + currentBatchSize > total) {
     currentBatchSize = total - state.processedCount;
   }
 
-  // 2. Update State
-  const batchUrls = state.urlsToProcess.slice(state.processedCount, state.processedCount + currentBatchSize);
-  
-  // Set time for UI countdown (5 seconds load time)
+  const batchItems = state.urlsToProcess.slice(state.processedCount, state.processedCount + currentBatchSize);
   const extractionTime = Date.now() + 5000;
   
   state.statusMessage = `Opening batch #${state.currentBatchIndex + 1} (${currentBatchSize} tabs)... Waiting for load.`;
   state.nextActionTime = extractionTime; 
   await chrome.storage.local.set({ auditState: state });
 
-  // 3. Open Tabs
   const tabIds = [];
-  for (const url of batchUrls) {
+  for (const item of batchItems) {
     try {
+      const url = item.url || item;
       const tab = await chrome.tabs.create({ url: url, active: false });
       tabIds.push(tab.id);
     } catch(e) { console.error(e); }
   }
 
-  // 4. Save IDs so we can find them later
   state.batchTabIds = tabIds;
   await chrome.storage.local.set({ auditState: state });
 
-  // 5. Schedule Extraction (The "Wait" phase)
-  // We set an alarm for 5 seconds. The SW can die now; the alarm will wake it up.
   createAlarm('BATCH_EXTRACT', 5000); 
 }
 
-// Phase 2: Extract & Close
+function getAsinFromUrl(url) {
+    if(!url) return "none";
+    const match = url.match(/(?:\/dp\/|\/gp\/product\/|\/product\/)([a-zA-Z0-9]{10})/i);
+    return match ? match[1].toUpperCase() : "none";
+}
+
 async function extractBatchData(state) {
   state.statusMessage = "Extracting data...";
   state.nextActionTime = null;
@@ -148,32 +161,86 @@ async function extractBatchData(state) {
 
   const tabIds = state.batchTabIds || [];
   const results = [];
+  const currentBatchSize = tabIds.length;
+  const batchItems = state.urlsToProcess.slice(state.processedCount, state.processedCount + currentBatchSize);
 
-  // 1. Run Scripts
-  const scriptPromises = tabIds.map(tabId => extractFromTab(tabId));
+  let captchaDetected = false;
+  let captchaTabId = null;
+
+  const scriptPromises = tabIds.map(async (tabId, index) => {
+      const res = await extractFromTab(tabId);
+      const item = batchItems[index];
+      const originalUrl = item.url || item;
+      
+      if (res) {
+          if (res.error === "CAPTCHA_DETECTED") {
+              captchaDetected = true;
+              captchaTabId = tabId;
+              return null; // Don't add to results yet
+          }
+
+          res.queryASIN = getAsinFromUrl(originalUrl);
+          
+          if (item.expected) {
+              res.expected = item.expected;
+          }
+          if (res.error && !res.url) {
+              res.url = originalUrl;
+          }
+      }
+      return res;
+  });
+  
   const batchResults = await Promise.all(scriptPromises);
   
-  // Filter valid results
+  // Smart Captcha Handling
+  if (captchaDetected && captchaTabId) {
+      // 1. Pause State
+      state.statusMessage = "CAPTCHA DETECTED! Paused. Please solve the captcha in the open tab to resume.";
+      state.isScanning = false; // Soft pause
+      await chrome.storage.local.set({ auditState: state });
+
+      // 2. Focus the Tab
+      await chrome.tabs.update(captchaTabId, { active: true });
+
+      // 3. Monitor for Resolution (Resume logic)
+      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
+          if (tabId === captchaTabId && changeInfo.status === 'complete') {
+              if (!tab.title.includes("Robot Check")) {
+                  // Captcha solved!
+                  chrome.tabs.onUpdated.removeListener(listener);
+                  
+                  // Resume: Set scanning true and re-trigger extraction for this batch immediately
+                  state.isScanning = true;
+                  state.statusMessage = "Captcha solved! Resuming...";
+                  chrome.storage.local.set({ auditState: state });
+                  
+                  // Give it 2 seconds to settle then extract
+                  createAlarm('BATCH_EXTRACT', 2000); 
+              }
+          }
+      });
+      
+      return; // Stop processing this batch until solved
+  }
+
+  // Normal Processing
   batchResults.forEach(res => {
     if (res && (res.found || res.error)) results.push(res);
   });
 
-  // 2. Close Tabs
   if (tabIds.length > 0) {
     try { await chrome.tabs.remove(tabIds); } catch(e) {}
   }
 
-  // 3. Update State
   state.results.push(...results);
-  state.processedCount += results.length; // Or batchUrls.length if we want to count failures
+  state.processedCount += results.length; 
   state.currentBatchIndex++;
-  state.batchTabIds = []; // Clear current batch
+  state.batchTabIds = []; 
 
-  // 4. Check if Done or Schedule Next
   const total = state.urlsToProcess.length;
   if (state.processedCount < total) {
-    // Schedule Cool Down
-    const delaySeconds = getRandomDivisible(5, 30, 5); // 5 to 60s cool down
+    const delaySeconds = getRandomDivisible(5, 30, 5); 
     const nextRunTime = Date.now() + (delaySeconds * 1000);
 
     state.statusMessage = `Cooling down for ${delaySeconds}s...`;
@@ -200,10 +267,7 @@ async function finishScan(state) {
   }
 }
 
-// --- Helpers ---
-
 function createAlarm(name, delayMs) {
-  // Use 'when' for precise absolute time triggering
   chrome.alarms.create(name, { when: Date.now() + delayMs });
 }
 
@@ -217,7 +281,6 @@ async function extractFromTab(tabId) {
       return { tabId, ...result.result };
     }
   } catch (err) {
-    // Tab might have failed to load or closed
     return { error: " extraction_failed", tabId };
   }
   return null;
