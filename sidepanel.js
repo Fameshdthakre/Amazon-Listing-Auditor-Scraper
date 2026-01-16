@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDiv = document.getElementById('status');
   const progressCountDiv = document.getElementById('progressCount'); 
   const selectAllCheckbox = document.getElementById('selectAll');
+  const downloadErrorsBtn = document.getElementById('downloadErrorsBtn');
   
   // Tabs & Sections
   const tabCurrent = document.getElementById('tabCurrent');
@@ -870,6 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
           downloadXlsxBtn.style.display = 'none'; 
           pushSheetBtn.style.display = 'none'; 
           pushExcelBtn.style.display = 'none'; 
+          downloadErrorsBtn.style.display = 'none';
           copyBtn.style.display = 'none';
           clearSection.style.display = 'none';
           dashboardView.style.display = 'none';
@@ -891,12 +893,22 @@ document.addEventListener('DOMContentLoaded', () => {
               copyBtn.style.display = 'block';
               clearSection.style.display = 'block';
               resultsPlaceholder.style.display = 'none'; 
+
+              // Check for errors to show/hide the error download button
+              const hasErrors = results.some(r => r.error);
+              if (hasErrors) {
+                  downloadErrorsBtn.style.display = 'block';
+              } else {
+                  downloadErrorsBtn.style.display = 'none';
+              }
+
               updateDashboard(results);
           } else {
               downloadBtn.style.display = 'none';
               downloadXlsxBtn.style.display = 'none';
               pushSheetBtn.style.display = 'none';
               pushExcelBtn.style.display = 'none';
+              downloadErrorsBtn.style.display = 'none';
               copyBtn.style.display = 'none';
               clearSection.style.display = 'none';
               resultsPlaceholder.style.display = 'block'; 
@@ -1111,6 +1123,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", exportData.fileName + ".csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
+  downloadErrorsBtn.addEventListener('click', async () => {
+    const data = await chrome.storage.local.get('auditState');
+    const results = data.auditState ? data.auditState.results : [];
+    if (!results || results.length === 0) return;
+
+    const failedItems = results.filter(r => r.error);
+    if (failedItems.length === 0) {
+        alert("No errors to export.");
+        return;
+    }
+
+    const headers = ["URL", "ASIN", "Error Message"];
+    let csvContent = headers.join(",") + "\n";
+
+    failedItems.forEach(item => {
+        const url = item.url || "none";
+        const asin = item.queryASIN || (item.attributes ? item.attributes.mediaAsin : "none");
+        const errorMsg = item.error ? item.error.replace(/,/g, " ") : "Unknown Error";
+
+        csvContent += `"${url}","${asin}","${errorMsg}"\n`;
+    });
+
+    const now = new Date();
+    const pad = (num) => num.toString().padStart(2, '0');
+    const fileName = `Listing-Auditor_Errors_${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${now.getFullYear()}.csv`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

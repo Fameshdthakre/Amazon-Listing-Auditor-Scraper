@@ -204,7 +204,12 @@
     const availabilitySpan = document.querySelector('#availability span');
     if (oosDiv) { stockStatus = "Out Of Stock"; } 
     else if (noFeaturedDiv) { const textSpan = noFeaturedDiv.querySelector('span.a-text-bold'); stockStatus = textSpan ? textSpan.textContent.trim() : "No featured offers available"; } 
-    else if (availabilitySpan) { const availText = availabilitySpan.textContent.trim().toLowerCase(); if (availText.includes("currently unavailable") || availText.includes("out of stock")) stockStatus = "Out Of Stock"; } 
+    else if (availabilitySpan) {
+        const availText = availabilitySpan.textContent.trim().toLowerCase();
+        // Enhanced Multi-language "Out of Stock" checks
+        const oosKeywords = ["currently unavailable", "out of stock", "unavailable", "actualmente no disponible", "non disponible", "nicht verfügbar", "non disponibile", "niet beschikbaar"];
+        if (oosKeywords.some(kw => availText.includes(kw))) stockStatus = "Out Of Stock";
+    }
     else { if (displayPrice === "none") stockStatus = "Unknown / No Price"; }
 
     let soldBy = "none";
