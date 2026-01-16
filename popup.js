@@ -18,12 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
   const domainSelect = document.getElementById('domainSelect');
+  const loginBtn = document.getElementById('loginBtn');
   const feedbackLink = document.getElementById('feedbackLink');
-  
-  // Auth Elements
-  const googleBtn = document.getElementById('googleBtn');
-  const msBtn = document.getElementById('msBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
   
   // Dashboard Elements
   const dashboardView = document.getElementById('dashboardView');
@@ -38,229 +34,41 @@ document.addEventListener('DOMContentLoaded', () => {
   let USER_INFO = null;
   const GUEST_LIMIT = 10;
   let countdownInterval = null;
-  let previousIsScanning = false; // New: Track state for auto-download
 
-  // --- CONFIG: Microsoft Auth ---
-  // REQUIRED: Replace this with your actual Application (Client) ID from Azure Portal
-  const MS_CLIENT_ID = "88f7ac32-e2ab-401f-8019-f1780e23685d"; 
-  const MS_AUTH_URL = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`;
-
-  // --- Feedback Logic ---
+  // --- Feedback Logic (Updated with Version Pre-fill) ---
   if (feedbackLink) {
     feedbackLink.addEventListener('click', () => {
+        // 1. Get the current version dynamically from manifest.json
         const version = chrome.runtime.getManifest().version;
+
+        // 2. Setup your Form Details
         const baseUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSeZ4zNH3_Jiov3JnTa5K2VXffCCkDSsh-KvK_h3kIxmbejoIg/viewform';
         
+        // Updated with your specific ID for "App Version"
         const versionFieldId = 'entry.2030262534'; 
-        const emailFieldId = 'entry.1847764537'; // Added Email Field ID
 
+        // 3. Construct the URL
         const params = new URLSearchParams();
-        params.append('usp', 'pp_url'); 
-        
-        if (versionFieldId) params.append(versionFieldId, version);
-        
-        // Auto-fill email if user is logged in
-        if (IS_LOGGED_IN && USER_INFO && USER_INFO.email && emailFieldId) {
-            params.append(emailFieldId, USER_INFO.email);
-        }
+        params.append('usp', 'pp_url'); // Switched to pp_url as per your link structure
 
+        // Only append version if the placeholder ID has been updated
+        if (versionFieldId) {
+             params.append(versionFieldId, version);
+        }
+        
         const finalUrl = `${baseUrl}?${params.toString()}`;
         chrome.tabs.create({ url: finalUrl });
     });
   }
 
-  // --- Auth: Initialization ---
-  // Check if we have a stored user session first
-  chrome.storage.local.get(['userSession'], (data) => {
-      if (data.userSession) {
-          IS_LOGGED_IN = true;
-          USER_INFO = data.userSession;
-          updateUIForAuth();
-      } else {
-          // If no stored session, check for Chrome Native Identity (Google)
-          chrome.identity.getAuthToken({ interactive: false }, (token) => {
-              if (token && !chrome.runtime.lastError) {
-                  fetchGoogleUserInfo(token);
-              }
-          });
+  // --- Auth & Access Control ---
+  chrome.identity.getAuthToken({ interactive: false }, (token) => {
+      if (token && !chrome.runtime.lastError) {
+          fetchUserInfo(token);
       }
   });
 
-  // --- Auth: Google Handler ---
-  googleBtn.addEventListener('click', () => {
-      chrome.identity.getAuthToken({ interactive: true }, (token) => {
-          if (chrome.runtime.lastError) {
-              alert("Google Login failed: " + chrome.runtime.lastError.message);
-              return;
-          }
-          fetchGoogleUserInfo(token);
-      });
-  });
-
-  function fetchGoogleUserInfo(token) {
-      fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: { Authorization: 'Bearer ' + token }
-      })
-      .then(res => res.json())
-      .then(user => {
-          const session = {
-              provider: 'google',
-              name: user.given_name || 'User',
-              email: user.email,
-              token: token
-          };
-          handleLoginSuccess(session);
-      })
-      .catch(err => {
-          console.error("User Info Fetch Error:", err);
-          statusDiv.textContent = "Error fetching Google profile.";
-      });
-  }
-
-  // --- Auth: Microsoft Handler ---
-  msBtn.addEventListener('click', () => {
-      if (MS_CLIENT_ID === "YOUR_MICROSOFT_CLIENT_ID_HERE") {
-          alert("Developer Config Error: Please add Microsoft Client ID in popup.js");
-          return;
-      }
-
-      // 1. Get the Redirect URI automatically generated for this extension
-      const redirectUri = chrome.identity.getRedirectURL();
-      // NOTE: You MUST add this exact URL to your Azure Portal > Authentication > Redirect URIs
-
-      const scope = "openid profile User.Read email";
-      const nonce = Math.random().toString(36).substring(2, 15);
-      
-      const authUrl = `${MS_AUTH_URL}?client_id=${MS_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&nonce=${nonce}`;
-
-      chrome.identity.launchWebAuthFlow({
-          url: authUrl,
-          interactive: true
-      }, (responseUrl) => {
-          // Robust Error Handling for User Cancellation
-          if (chrome.runtime.lastError) {
-              const errMsg = chrome.runtime.lastError.message || "Unknown error";
-              // Check if user simply closed the popup
-              if (errMsg.includes("User cancelled") || errMsg.includes("did not approve")) {
-                  console.log("User cancelled login.");
-                  statusDiv.textContent = "Login cancelled.";
-              } else {
-                  console.error("Auth Flow Error:", errMsg);
-                  alert("Login Error: " + errMsg);
-              }
-              return; 
-          }
-          
-          if (!responseUrl) {
-              console.log("Auth Flow cancelled by user (No URL).");
-              return;
-          }
-          
-          // 2. Parse Hash for Access Token
-          // Microsoft returns token in the hash fragment: ...#access_token=eyJ...&token_type=Bearer...
-          try {
-              const url = new URL(responseUrl);
-              const urlParams = new URLSearchParams(url.hash.substring(1)); // Remove the leading '#'
-              const accessToken = urlParams.get("access_token");
-
-              if (accessToken) {
-                  fetchMicrosoftUserInfo(accessToken);
-              } else {
-                  console.error("No access token found in response URL");
-                  const errorDesc = urlParams.get("error_description");
-                  if (errorDesc) alert("Login Error: " + decodeURIComponent(errorDesc));
-              }
-          } catch(e) {
-              console.error("Error parsing response URL:", e);
-          }
-      });
-  });
-
-  function fetchMicrosoftUserInfo(token) {
-      fetch('https://graph.microsoft.com/v1.0/me', {
-          headers: { Authorization: 'Bearer ' + token }
-      })
-      .then(res => {
-          if (!res.ok) throw new Error("Failed to fetch MS profile");
-          return res.json();
-      })
-      .then(user => {
-          const session = {
-              provider: 'microsoft',
-              name: user.givenName || 'User',
-              email: user.mail || user.userPrincipalName,
-              token: token
-          };
-          handleLoginSuccess(session);
-      })
-      .catch(err => {
-          console.error("MS Graph Error:", err);
-          statusDiv.textContent = "Error fetching Microsoft profile.";
-      });
-  }
-
-  // --- Auth: Common Logic ---
-  function handleLoginSuccess(session) {
-      IS_LOGGED_IN = true;
-      USER_INFO = session;
-      chrome.storage.local.set({ userSession: session });
-      updateUIForAuth();
-  }
-
-  logoutBtn.addEventListener('click', () => {
-      // Clear local state
-      chrome.storage.local.remove('userSession');
-      IS_LOGGED_IN = false;
-      USER_INFO = null;
-      
-      // If Google, try to revoke/clear cached token
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-          if (token) {
-              chrome.identity.removeCachedAuthToken({ token: token }, () => {});
-          }
-      });
-      
-      // Update UI
-      updateUIForAuth();
-      statusDiv.textContent = "Logged out.";
-  });
-
-  function updateUIForAuth() {
-      if (IS_LOGGED_IN) {
-          googleBtn.style.display = 'none';
-          msBtn.style.display = 'none';
-          logoutBtn.style.display = 'flex';
-          
-          const name = USER_INFO ? (USER_INFO.name || 'User') : 'Pro User';
-          logoutBtn.textContent = `Logout (${name})`;
-          
-          tabBulk.classList.remove('disabled');
-          tabBulk.querySelector('.lock-icon').style.display = 'none';
-          document.querySelectorAll('.pro-feature').forEach(el => {
-              el.disabled = false;
-              el.checked = true;
-          });
-          selectAllCheckbox.disabled = false;
-      } else {
-          googleBtn.style.display = 'flex';
-          msBtn.style.display = 'flex';
-          logoutBtn.style.display = 'none';
-
-          if (mode === 'bulk' && !document.getElementById('stopBtn').offsetParent) { 
-            tabCurrent.click();
-          }
-          tabBulk.classList.add('disabled');
-          tabBulk.querySelector('.lock-icon').style.display = 'inline';
-          document.querySelectorAll('.pro-feature').forEach(el => {
-              el.checked = false;
-              el.disabled = true;
-          });
-          selectAllCheckbox.checked = false;
-          selectAllCheckbox.disabled = true;
-      }
-  }
-
-  // --- Logic Load (Existing) ---
+  // State Load
   chrome.storage.local.get(['auditState'], (data) => {
     if (data.auditState) {
       renderState(data.auditState);
@@ -279,6 +87,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  loginBtn.addEventListener('click', () => {
+      if (IS_LOGGED_IN) {
+          chrome.identity.getAuthToken({ interactive: false }, (token) => {
+              if (token) {
+                  chrome.identity.removeCachedAuthToken({ token: token }, () => {
+                      IS_LOGGED_IN = false;
+                      USER_INFO = null;
+                      updateUIForAuth();
+                      statusDiv.textContent = "Logged out successfully.";
+                  });
+              } else {
+                  IS_LOGGED_IN = false;
+                  updateUIForAuth();
+              }
+          });
+      } else {
+          chrome.identity.getAuthToken({ interactive: true }, (token) => {
+              if (chrome.runtime.lastError) {
+                  alert("Login failed: " + chrome.runtime.lastError.message);
+                  return;
+              }
+              fetchUserInfo(token);
+          });
+      }
+  });
+
+  function fetchUserInfo(token) {
+      fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: 'Bearer ' + token }
+      })
+      .then(res => res.json())
+      .then(user => {
+          IS_LOGGED_IN = true;
+          USER_INFO = user;
+          updateUIForAuth();
+      })
+      .catch(err => {
+          console.error("User Info Fetch Error:", err);
+          statusDiv.textContent = "Error fetching user profile.";
+      });
+  }
+
+  function updateUIForAuth() {
+      if (IS_LOGGED_IN) {
+          const name = USER_INFO ? (USER_INFO.given_name || 'User') : 'Pro User';
+          loginBtn.textContent = `Logout (${name})`;
+          loginBtn.style.borderColor = "#22c55e"; 
+          tabBulk.classList.remove('disabled');
+          tabBulk.querySelector('.lock-icon').style.display = 'none';
+          document.querySelectorAll('.pro-feature').forEach(el => {
+              el.disabled = false;
+              el.checked = true;
+          });
+          selectAllCheckbox.disabled = false;
+      } else {
+          loginBtn.textContent = "Login with Google";
+          loginBtn.style.borderColor = "#e2e8f0";
+          if (mode === 'bulk' && !document.getElementById('stopBtn').offsetParent) { 
+            tabCurrent.click();
+          }
+          tabBulk.classList.add('disabled');
+          tabBulk.querySelector('.lock-icon').style.display = 'inline';
+          document.querySelectorAll('.pro-feature').forEach(el => {
+              el.checked = false;
+              el.disabled = true;
+          });
+          selectAllCheckbox.checked = false;
+          selectAllCheckbox.disabled = true;
+      }
+  }
 
   const marketplaceData = {
     'Amazon.com': { root: 'https://www.amazon.com/dp/', en: '?language=en_US', native: '?language=en_US' },
@@ -407,15 +285,6 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const { isScanning, processedCount, urlsToProcess, results, statusMessage, nextActionTime } = state;
       const total = urlsToProcess.length;
-
-      // Auto-Download Check: Did we just finish scanning?
-      if (previousIsScanning && !isScanning && results && results.length > 0) {
-          // console.log("Scan finished, triggering auto-download...");
-          setTimeout(() => {
-              downloadBtn.click();
-          }, 500); // Short delay to ensure UI is ready
-      }
-      previousIsScanning = isScanning;
 
       if (isScanning) {
           scanBtn.style.display = 'none';
