@@ -291,3 +291,8 @@ function getRandomDivisible(min, max, step) {
   const randomStep = Math.floor(Math.random() * (steps + 1));
   return min + (randomStep * step);
 }
+
+// --- Side Panel Configuration ---
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error(error));

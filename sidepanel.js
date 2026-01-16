@@ -1162,6 +1162,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- NEW: Push to Excel Online Logic ---
+
+  function getMicrosoftToken(interactive, callback) {
+      const redirectUri = chrome.identity.getRedirectURL();
+      const scope = MS_SCOPES;
+      const nonce = Math.random().toString(36).substring(2, 15);
+      const authUrl = `${MS_AUTH_URL}?client_id=${MS_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&nonce=${nonce}`;
+
+      chrome.identity.launchWebAuthFlow({
+          url: authUrl,
+          interactive: interactive
+      }, (responseUrl) => {
+          if (chrome.runtime.lastError) {
+              callback(null);
+              return;
+          }
+          if (!responseUrl) {
+              callback(null);
+              return;
+          }
+          try {
+              const url = new URL(responseUrl);
+              const urlParams = new URLSearchParams(url.hash.substring(1));
+              const accessToken = urlParams.get("access_token");
+              callback(accessToken);
+          } catch(e) {
+              callback(null);
+          }
+      });
+  }
+
   pushExcelBtn.addEventListener('click', () => {
       // If already logged in with Microsoft, try using that token first
       if (IS_LOGGED_IN && USER_INFO && USER_INFO.provider === 'microsoft' && USER_INFO.token) {
