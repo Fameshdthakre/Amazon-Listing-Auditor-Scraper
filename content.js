@@ -23,6 +23,30 @@
         return endIndex !== -1 ? str.substring(openBracketIndex, endIndex) : null;
     };
 
+    // --- 1.5. Alert/Interstitial Page Handling (Unattended Mode) ---
+    const alertElement = document.querySelector('html.a-no-js');
+    if (alertElement) {
+        // We are on the "no-js" alert page or similar interstitial
+        const submitBtn = document.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            // Check retry count to prevent infinite loops
+            const retryKey = 'alert_retry_' + window.location.href;
+            let retries = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
+
+            if (retries < 5) {
+                sessionStorage.setItem(retryKey, (retries + 1).toString());
+                console.log(`Alert page detected. Clicking continue... (Attempt ${retries + 1}/5)`);
+                submitBtn.click();
+                // Return a specific status to keep the auditor waiting/retrying logic active if possible,
+                // or just rely on the click to reload the page.
+                // Since this script runs once per page load, we return a special status.
+                return { found: false, error: "INTERSTITIAL_REDIRECT", url: window.location.href, status: "RETRYING" };
+            } else {
+                return { found: true, error: "INTERSTITIAL_FAILED", url: window.location.href, title: "Alert Page Stuck" };
+            }
+        }
+    }
+
     // --- 2. Robust Page Detection ---
     if (document.title.includes("Robot Check") || document.querySelector("form[action*='/errors/validateCaptcha']")) {
       return { found: true, error: "CAPTCHA_DETECTED", url: window.location.href, title: "Captcha Block" };

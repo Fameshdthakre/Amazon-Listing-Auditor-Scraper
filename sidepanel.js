@@ -1258,9 +1258,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tabMap.variationFamily) {
                 let vFamilies = [];
                 try {
-                    const raw = tabData.attributes.variationFamily;
-                    if (raw && raw !== 'none') vFamilies = JSON.parse(raw);
-                } catch(e) {}
+                    let raw = tabData.attributes.variationFamily;
+                    if (raw && raw !== 'none') {
+                        // Fix for format: [ASIN1, ASIN2, ...] which might not be valid JSON if not quoted
+                        if (raw.startsWith('[') && raw.endsWith(']')) {
+                            // Strip brackets and split by comma
+                            const cleanContent = raw.slice(1, -1);
+                            vFamilies = cleanContent.split(',').map(s => s.trim().replace(/['"]+/g, '')).filter(s => s.length > 0);
+                        } else {
+                            vFamilies = JSON.parse(raw);
+                        }
+                    }
+                } catch(e) { console.error("Error parsing variationFamily:", e); }
+
                 if (Array.isArray(vFamilies) && vFamilies.length > 0) {
                     tabMap.variationFamily.rows.push([pageASIN, ...vFamilies]);
                 }
