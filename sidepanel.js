@@ -86,6 +86,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const MS_AUTH_URL = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`;
   const MS_SCOPES = "openid profile User.Read email Files.ReadWrite";
 
+  // --- CONFIG: Firebase ---
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyDR0EK0OULam0xsB9yVp_8qno8NV2ivF6Q",
+      authDomain: "tfgcp-project-01.firebaseapp.com",
+      projectId: "tfgcp-project-01",
+      storageBucket: "tfgcp-project-01.firebasestorage.app",
+      messagingSenderId: "789113929254",
+      appId: "1:789113929254:web:d4ac06a817349e34aef0e7",
+      measurementId: "G-ZEQNZ284W0"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+  </script>
+
   // --- Feature: Theme Toggle ---
   function initTheme() {
       chrome.storage.local.get(['theme'], (data) => {
@@ -186,10 +211,33 @@ document.addEventListener('DOMContentLoaded', () => {
           let addedCount = 0;
           items.forEach(newItem => {
               const existingIndex = list.findIndex(i => i.asin === newItem.asin);
+              const timestamp = Date.now();
+              const historyEntry = { 
+                  date: timestamp, 
+                  price: newItem.initialPrice, 
+                  title: newItem.expected ? newItem.expected.title : null 
+              };
+
               if (existingIndex > -1) {
-                  list[existingIndex] = { ...list[existingIndex], ...newItem };
+                  // Merge and update
+                  const existing = list[existingIndex];
+                  const newHistory = existing.history ? [...existing.history, historyEntry] : [historyEntry];
+                  // Keep last 5 history items
+                  if (newHistory.length > 5) newHistory.shift();
+
+                  list[existingIndex] = { 
+                      ...existing, 
+                      ...newItem, 
+                      history: newHistory,
+                      lastScan: existing.lastScan || null
+                  };
               } else {
-                  list.push(newItem);
+                  // New Item
+                  list.push({
+                      ...newItem,
+                      history: [historyEntry],
+                      lastScan: null
+                  });
                   addedCount++;
               }
           });
@@ -239,14 +287,41 @@ document.addEventListener('DOMContentLoaded', () => {
       list.forEach(item => {
           const div = document.createElement('div');
           div.className = 'wl-item';
+          
+          // Determine Status
+          let statusIcon = '⚪'; // Default/Pending
+          let statusTitle = "Not audited yet";
+          if (item.lastScan) {
+              if (item.lastScan.status === 'OK') statusIcon = '🟢';
+              else if (item.lastScan.status === 'ISSUE') statusIcon = '🟠';
+              else if (item.lastScan.status === 'ERROR') statusIcon = '🔴';
+              
+              if (item.lastScan.priceChange) statusIcon += ' 💲'; // Price changed
+          }
+
+          const lastScanDate = item.lastScan ? new Date(item.lastScan.date).toLocaleDateString() : '-';
+
           div.innerHTML = `
-              <div class="wl-info">
-                  <span class="wl-asin">${item.asin}</span> 
-                  <span class="wl-title">- ${item.expected.title ? item.expected.title.substring(0, 30) + "..." : "No Title"}</span>
+              <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; align-items:center; width:100%;">
+                  <div class="wl-info" style="font-size:11px;">
+                      <a href="${item.url}" target="_blank" style="color:var(--primary); font-weight:700; text-decoration:none;">${item.asin}</a>
+                      <div class="wl-title" style="font-size:9px; color:var(--text-muted);">${item.expected.title ? item.expected.title.substring(0, 20) + "..." : "No Baseline"}</div>
+                  </div>
+                  <div style="text-align:center; font-size:10px; color:var(--text-muted);">
+                      ${lastScanDate}
+                  </div>
+                  <div style="text-align:right; font-size:14px; cursor:default;" title="${statusTitle}">
+                      ${statusIcon}
+                      <span class="wl-del" title="Remove" style="margin-left:8px; cursor:pointer;">&times;</span>
+                  </div>
               </div>
-              <div class="wl-del" title="Remove">×</div>
           `;
-          div.querySelector('.wl-del').addEventListener('click', () => removeFromWatchlist(item.asin));
+          
+          div.querySelector('.wl-del').addEventListener('click', (e) => {
+              e.stopPropagation();
+              removeFromWatchlist(item.asin);
+          });
+          
           watchlistItemsDiv.appendChild(div);
       });
   };
@@ -258,11 +333,64 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.storage.local.get([key], (data) => {
           const list = data[key] || [];
           if (list.length === 0) return;
-          const urlsToProcess = list; 
+          const urlsToProcess = list.map(item => item.url); 
           const settings = { disableImages: disableImagesInput.checked };
           chrome.runtime.sendMessage({ action: 'START_SCAN', payload: { urls: urlsToProcess, mode: 'watchlist', settings } });
       });
   });
+
+  // Listen for Audit Completion to Update Watchlist Status
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'SCAN_COMPLETE' && request.mode === 'watchlist') {
+          updateWatchlistAfterScan(request.results);
+      }
+  });
+
+  const updateWatchlistAfterScan = (results) => {
+      const key = getWatchlistKey();
+      chrome.storage.local.get([key], (data) => {
+          let list = data[key] || [];
+          
+          list = list.map(item => {
+              const result = results.find(r => r.url === item.url || (r.attributes && r.attributes.mediaAsin === item.asin));
+              if (result) {
+                  const now = Date.now();
+                  let status = 'OK';
+                  let priceChange = false;
+
+                  if (result.error) status = 'ERROR';
+                  else {
+                      // Check LQS
+                      const lqs = parseInt(result.attributes.lqs);
+                      if (lqs < 70) status = 'ISSUE';
+
+                      // Check Title Match
+                      if (item.expected && item.expected.title && result.attributes.metaTitle !== item.expected.title) {
+                          status = 'ISSUE';
+                      }
+
+                      // Check Price
+                      if (item.initialPrice && result.attributes.displayPrice !== 'none' && result.attributes.displayPrice !== item.initialPrice) {
+                          priceChange = true;
+                      }
+                  }
+
+                  return {
+                      ...item,
+                      lastScan: {
+                          date: now,
+                          status: status,
+                          priceChange: priceChange,
+                          lastLqs: result.attributes.lqs
+                      }
+                  };
+              }
+              return item;
+          });
+
+          chrome.storage.local.set({ [key]: list }, loadWatchlist);
+      });
+  };
 
   snapshotBtn.addEventListener('click', async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1026,12 +1154,12 @@ document.addEventListener('DOMContentLoaded', () => {
     'variationCount': { type: 'attr' },
     'variationFamily': { type: 'attr' },
     'hasBrandStory': { type: 'attr' },
-    'brandStoryImgs': { type: 'attr' },
+    'brandStoryImgs': { type: 'attr' }, // Added to ensure main sheet export
     'hasAplus': { type: 'attr' },
-    'aPlusImgs': { type: 'attr' },
+    'aPlusImgs': { type: 'attr' }, // Added to ensure main sheet export
     'hasVideo': { type: 'attr' },
     'videoCount': { type: 'attr' },    
-    'videos': { type: 'attr' },
+    'videos': { type: 'attr' }, // Added to ensure main sheet export
     'imgVariantCount': { type: 'calc' },
     'imgVariantDetails': { type: 'calc' },
     'url': { type: 'root' }
@@ -1123,7 +1251,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     const config = fieldConfig[id];
                     if (config) {
-                        if (config.type === 'attr') val = tabData.attributes[id];
+                        if (config.type === 'attr') {
+                            val = tabData.attributes[id];
+                            // Ensure objects/arrays are stringified for CSV/Main Sheet
+                            if (val && typeof val === 'object') {
+                                val = JSON.stringify(val);
+                            }
+                        }
                         else if (config.type === 'root') val = tabData[id];
                         else if (config.type === 'calc') {
                           if (id === 'imgVariantCount') val = tabData.data ? tabData.data.length : 0;

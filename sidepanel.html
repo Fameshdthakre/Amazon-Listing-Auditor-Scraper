@@ -326,10 +326,18 @@
             <div id="watchlistLimitMsg" style="font-size:10px; color:var(--text-muted);">Limit: 10 (Free)</div>
             <button id="clearWatchlistBtn" style="background:transparent; border:none; color:var(--danger); font-size:10px; text-decoration:underline; cursor:pointer; padding:0;">Clear All</button>
         </div>
-        <div id="watchlistItems">
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 10px; font-weight: 700; padding: 4px 8px; color: var(--text-muted); border-bottom: 1px solid var(--border);">
+            <span>ASIN / TITLE</span>
+            <span style="text-align:center">LAST SCAN</span>
+            <span style="text-align:right">STATUS</span>
+        </div>
+        
+        <div id="watchlistItems" style="max-height: 250px; overflow-y: auto;">
             <div style="padding:10px; text-align:center; color:var(--text-muted); font-size:11px;">Watchlist is empty.</div>
         </div>
-        <div id="watchlistCount" style="font-size:10px; color:var(--text-muted); text-align:right; margin-bottom:8px;">0 Items</div>
+        
+        <div id="watchlistCount" style="font-size:10px; color:var(--text-muted); text-align:right; margin: 8px 0;">0 Items</div>
         <button id="auditWatchlistBtn" style="width: 100%; padding: 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">
              🛡️ AUDIT WATCHLIST
         </button>
@@ -494,5 +502,29 @@
 
   <script src="xlsx.full.min.js"></script>
   <script src="sidepanel.js"></script>
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyDR0EK0OULam0xsB9yVp_8qno8NV2ivF6Q",
+      authDomain: "tfgcp-project-01.firebaseapp.com",
+      projectId: "tfgcp-project-01",
+      storageBucket: "tfgcp-project-01.firebasestorage.app",
+      messagingSenderId: "789113929254",
+      appId: "1:789113929254:web:d4ac06a817349e34aef0e7",
+      measurementId: "G-ZEQNZ284W0"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+  </script>
+  
 </body>
 </html>
