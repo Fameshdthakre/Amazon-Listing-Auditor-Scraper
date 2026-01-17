@@ -1634,7 +1634,7 @@ function isVersionServiceProvider(provider) {
     const component = provider.getComponent();
     return component?.type === "VERSION" /* ComponentType.VERSION */;
 }
-const name$q = "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+const name$q = "./firebase-app.js";
 const version$1 = "0.14.7";
 /**
  * @license
@@ -1652,7 +1652,7 @@ const version$1 = "0.14.7";
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-const logger = new Logger('https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js');
+const logger = new Logger('./firebase-app.js');
 const name$p = "@firebase/app-compat";
 const name$o = "@firebase/analytics-compat";
 const name$n = "@firebase/analytics";
