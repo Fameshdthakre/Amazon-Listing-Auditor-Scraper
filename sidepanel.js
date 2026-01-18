@@ -147,8 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Feature: Preview Table ---
   previewBtn.addEventListener('click', async () => {
-      const data = await chrome.storage.local.get('auditState');
-      const results = data.auditState ? data.auditState.results : [];
+      const data = await chrome.storage.local.get(['auditState', 'auditResults']);
+      const state = data.auditState;
+      const results = (data.auditResults) ? data.auditResults : (state ? state.results : []);
       if (!results || results.length === 0) { alert("No results to preview."); return; }
 
       let html = '<table class="preview-table"><thead><tr><th>ASIN</th><th>Status</th><th>Title</th><th>LQS</th><th>Issues</th></tr></thead><tbody>';
@@ -978,9 +979,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Logic Load ---
-  chrome.storage.local.get(['auditState'], (data) => {
+  chrome.storage.local.get(['auditState', 'auditResults'], (data) => {
     if (data.auditState) {
-      renderState(data.auditState);
+      const combinedState = { ...data.auditState, results: data.auditResults || data.auditState.results || [] };
+      renderState(combinedState);
       if(data.auditState.isScanning) {
           const m = data.auditState.mode;
           mode = m;
@@ -1002,8 +1004,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.auditState) {
-      renderState(changes.auditState.newValue);
+    if (namespace === 'local' && (changes.auditState || changes.auditResults)) {
+      // Fetch fresh to ensure we have combined data
+      chrome.storage.local.get(['auditState', 'auditResults'], (data) => {
+          if (data.auditState) {
+              const combinedState = { ...data.auditState, results: data.auditResults || data.auditState.results || [] };
+              renderState(combinedState);
+          }
+      });
     }
   });
 
@@ -1594,8 +1602,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const cleanAmazonUrl = (url) => { if (!url || url === 'none') return null; return url.replace(/\._[A-Z0-9,._-]+\./i, '.'); };
 
   const getExportData = async () => {
-    const data = await chrome.storage.local.get('auditState');
-    let results = data.auditState ? data.auditState.results : [];
+    const data = await chrome.storage.local.get(['auditState', 'auditResults']);
+    let results = (data.auditResults) ? data.auditResults : (data.auditState ? data.auditState.results : []);
     if (!results || results.length === 0) return null;
 
     // --- Type 2 Audit Merge Logic ---
@@ -1932,8 +1940,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   downloadErrorsBtn.addEventListener('click', async () => {
-    const data = await chrome.storage.local.get('auditState');
-    const results = data.auditState ? data.auditState.results : [];
+    const data = await chrome.storage.local.get(['auditState', 'auditResults']);
+    const results = (data.auditResults) ? data.auditResults : (data.auditState ? data.auditState.results : []);
     if (!results || results.length === 0) return;
 
     const failedItems = results.filter(r => r.error);

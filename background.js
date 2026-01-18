@@ -4,7 +4,7 @@ const INITIAL_STATE = {
   isScanning: false,
   mode: 'current', 
   urlsToProcess: [],
-  results: [],
+  // results: [], // Stored separately in 'auditResults'
   processedCount: 0,
   currentBatchIndex: 0,
   batchTabIds: [],      
@@ -45,7 +45,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  const data = await chrome.storage.local.get('auditState');
+  const data = await chrome.storage.local.get(['auditState']);
   const state = data.auditState;
 
   if (!state || !state.isScanning) return;
@@ -53,6 +53,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'QUEUE_PROCESS') {
     await processQueue(state);
   }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete') {
+        const data = await chrome.storage.local.get('auditState');
+        const state = data.auditState;
+        if (state && state.isScanning && state.activeTabs && state.activeTabs[tabId]) {
+            state.activeTabs[tabId].loaded = true;
+            await chrome.storage.local.set({ auditState: state });
+            // Trigger queue immediately to avoid waiting for alarm
+            createAlarm('QUEUE_PROCESS', 10);
+        }
+    }
 });
 
 // --- Core Functions ---
@@ -81,7 +94,8 @@ async function startScan(payload) {
 
   // Store window ID in state
   newState.workerWindowId = workerWindow.id;
-  await chrome.storage.local.set({ auditState: newState });
+  // Initialize separated storage
+  await chrome.storage.local.set({ auditState: newState, auditResults: [] });
 
   // DNR Logic: Enable/Disable Rules based on settings
   // Rule ID 100 is for Images. IDs 1-6 are for ads/trackers (always block if possible or toggled?)
@@ -177,7 +191,7 @@ async function clearData() {
     ...currentState,
     isScanning: false,
     urlsToProcess: [],
-    results: [],
+    // results: [],
     processedCount: 0,
     queueIndex: 0,
     activeTabs: {},
@@ -185,7 +199,7 @@ async function clearData() {
     nextActionTime: null
   };
 
-  await chrome.storage.local.set({ auditState: clearedState });
+  await chrome.storage.local.set({ auditState: clearedState, auditResults: [] });
 }
 
 function getAsinFromUrl(url) {
@@ -209,8 +223,11 @@ async function processQueue(state) {
         // If tab is extracting, skip
         if (tabInfo.status === 'extracting') continue;
 
-        // If tab is 'loading', check if we should extract yet (min delay 2s)
-        if (tabInfo.status === 'loading' && (now - tabInfo.startTime > 2000)) {
+        // Check readiness: Either onUpdated fired (loaded=true) OR timeout (10s) passed
+        // This removes the arbitrary 2s wait for fast pages
+        const isReady = tabInfo.loaded || (now - tabInfo.startTime > 10000);
+
+        if (tabInfo.status === 'loading' && isReady) {
             // Trigger Extraction
             state.activeTabs[tabId].status = 'extracting';
             await chrome.storage.local.set({ auditState: state });
@@ -218,25 +235,45 @@ async function processQueue(state) {
             // Extract async (doesn't block the loop)
             extractSingleTab(state, tabId, tabInfo).then(async (result) => {
                 // Fetch fresh state to avoid race conditions
-                const freshData = await chrome.storage.local.get('auditState');
-                const freshState = freshData.auditState;
+                const freshData = await chrome.storage.local.get(['auditState', 'auditResults']);
+                let freshState = freshData.auditState;
+                const freshResults = freshData.auditResults || [];
+
+                if(!freshState) return; // Scan stopped or cleared
 
                 if (result) {
                     if (result.error === "CAPTCHA_DETECTED") {
                         handleCaptcha(freshState, tabId);
                         return;
                     }
-                    freshState.results.push(result);
+
+                    // Retry Logic
+                    const isRetryable = result.error === "extraction_crash" || result.error === "extraction_failed" || result.error === "INTERSTITIAL_REDIRECT";
+                    const freshTabInfo = freshState.activeTabs ? freshState.activeTabs[tabId] : null;
+                    const currentRetries = (freshTabInfo && freshTabInfo.retries) ? freshTabInfo.retries : 0;
+
+                    if (isRetryable && currentRetries < 2 && freshTabInfo) {
+                        freshState.activeTabs[tabId].retries = currentRetries + 1;
+                        freshState.activeTabs[tabId].status = 'loading';
+                        freshState.activeTabs[tabId].loaded = false;
+                        freshState.activeTabs[tabId].startTime = Date.now();
+
+                        await chrome.storage.local.set({ auditState: freshState });
+                        try { await chrome.tabs.reload(parseInt(tabId)); } catch(e) {}
+                        return;
+                    }
+
+                    freshResults.push(result);
                     freshState.processedCount++;
                 }
 
                 // Cleanup tab
-                delete freshState.activeTabs[tabId];
+                if (freshState.activeTabs) delete freshState.activeTabs[tabId];
                 try { await chrome.tabs.remove(parseInt(tabId)); } catch(e) {}
 
                 // Save and continue loop
-                await chrome.storage.local.set({ auditState: freshState });
-                createAlarm('QUEUE_PROCESS', 100);
+                await chrome.storage.local.set({ auditState: freshState, auditResults: freshResults });
+                createAlarm('QUEUE_PROCESS', 50); // Fast cycle
             });
         }
     }
@@ -276,7 +313,8 @@ async function processQueue(state) {
                     item: item,
                     isVC: isVC,
                     startTime: Date.now(),
-                    status: 'loading'
+                    status: 'loading',
+                    retries: 0
                 };
             } catch(e) {
                 console.error("Tab Create Error", e);
@@ -344,6 +382,8 @@ async function extractSingleTab(state, tabId, tabInfo) {
 }
 
 async function handleCaptcha(state, tabId) {
+    if (!state.isScanning && state.statusMessage.includes("CAPTCHA")) return;
+
     state.statusMessage = "CAPTCHA DETECTED! Paused. Solve in Worker Window to resume.";
     state.isScanning = false;
     await chrome.storage.local.set({ auditState: state });
