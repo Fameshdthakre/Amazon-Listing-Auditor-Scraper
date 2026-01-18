@@ -301,9 +301,14 @@ async function extractSingleTab(state, tabId, tabInfo) {
         // --- AOD (All Offers Display) Scrape Trigger ---
         if (state.settings && state.settings.scrapeAOD && !tabInfo.isVC) {
             // Inject flag to tell content.js to scrape AOD
+            const strategy = state.settings.aodStrategy || 'all';
             await chrome.scripting.executeScript({
                 target: { tabId: parseInt(tabId) },
-                func: () => { window.SHOULD_SCRAPE_AOD = true; }
+                func: (strat) => {
+                    window.SHOULD_SCRAPE_AOD = true;
+                    window.AOD_STRATEGY = strat;
+                },
+                args: [strategy]
             });
         }
 
