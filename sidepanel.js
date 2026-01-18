@@ -884,6 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.disabled = false; el.checked = true; });
           document.querySelectorAll('.group-select').forEach(el => el.disabled = false);
+          document.querySelectorAll('.tpl-group-select').forEach(el => el.disabled = false);
           selectAllCheckbox.disabled = false;
       } else {
           googleBtn.style.display = 'flex';
@@ -901,6 +902,8 @@ document.addEventListener('DOMContentLoaded', () => {
           document.querySelectorAll('.pro-feature').forEach(el => { el.checked = false; el.disabled = true; });
           document.querySelector('.group-select[data-group="advanced"]').disabled = true;
           document.querySelector('.group-select[data-group="content"]').disabled = true;
+          document.querySelector('.tpl-group-select[data-group="advanced"]').disabled = true;
+          document.querySelector('.tpl-group-select[data-group="content"]').disabled = true;
           selectAllCheckbox.checked = false;
           selectAllCheckbox.disabled = true;
       }
