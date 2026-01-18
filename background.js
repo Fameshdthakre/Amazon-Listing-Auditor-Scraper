@@ -271,19 +271,27 @@ async function processQueue(state) {
                         freshState.processedCount++;
                     }
 
-                    // Cleanup tab
-                    if (freshState.activeTabs) delete freshState.activeTabs[tabId];
+                // Strict Cleanup: Ensure tab is removed from state AND browser
+                if (freshState.activeTabs && freshState.activeTabs[tabId]) {
+                    delete freshState.activeTabs[tabId];
+                }
+
+                // Close tab if it exists
                     try { await chrome.tabs.remove(parseInt(tabId)); } catch(e) {}
 
-                    // Save and continue loop
+                // Atomic State Update: Commit state and results together
                     await chrome.storage.local.set({ auditState: freshState, auditResults: freshResults });
-                    createAlarm('QUEUE_PROCESS', 50); // Fast cycle
+
+                // Trigger next cycle immediately to fill the now-empty slot
+                createAlarm('QUEUE_PROCESS', 50);
                 });
             }
         }
 
         // 2. Fill Pool (Start New Tabs)
-        const activeCount = Object.keys(state.activeTabs || {}).length;
+    // We recalculate active count based on current verified keys
+    const currentActiveKeys = Object.keys(state.activeTabs || {});
+    const activeCount = currentActiveKeys.length;
         const itemsLeft = state.urlsToProcess.length - state.queueIndex;
 
         if (activeCount < CONCURRENCY_LIMIT && itemsLeft > 0) {
