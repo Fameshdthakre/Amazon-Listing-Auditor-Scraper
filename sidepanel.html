@@ -256,11 +256,20 @@
         </div>
     </div>
     
+    <div style="display:flex; justify-content:center; gap:16px; margin-bottom:12px; padding:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="scraper" checked style="accent-color:var(--primary);"> Scraper Mode
+        </label>
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="auditor" style="accent-color:var(--primary);"> Auditor Mode
+        </label>
+    </div>
+
     <div class="mode-tabs">
       <div class="mode-tab active" id="tabCurrent">Current Window</div>
-      <div class="mode-tab disabled" id="tabBulk">Bulk Import <span class="lock-icon">🔒</span></div>
+      <div class="mode-tab disabled" id="tabBulk">Bulk / CSV <span class="lock-icon">🔒</span></div>
       <div class="mode-tab" id="tabWatchlist">Watchlist</div>
-      <div class="mode-tab disabled" id="tabVendor">Vendor <span class="lock-icon">🔒</span></div>
+      <div class="mode-tab disabled" id="tabVendor" style="display:none;">Vendor (Auth) <span class="lock-icon">🔒</span></div>
     </div>
     
     <div id="currentSection">
@@ -272,7 +281,7 @@
                  📸 Snapshot
             </button>
         </div>
-        <div style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+        <div id="scraperAODWrapper" style="margin-top:8px; display:flex; align-items:center; gap:6px;">
             <input type="checkbox" id="scrapeAODCurrent" style="accent-color:var(--primary);">
             <label for="scrapeAODCurrent" style="font-size:12px; color:var(--text-main); font-weight:500;">Also Scrape Offers (AOD)</label>
         </div>
@@ -280,8 +289,8 @@
     </div>
 
     <div id="bulkSection">
-      <div class="bulk-hint">
-          Upload CSV (Headers: URL, Expected Title) or Paste Links
+      <div class="bulk-hint" id="bulkHintText">
+          Upload CSV or Paste Links
       </div>
       <div style="margin-bottom: 12px;">
           <div class="file-input-wrapper" style="margin-bottom: 8px;">
@@ -295,6 +304,9 @@
                  📥 Import Watchlist
               </button>
           </div>
+          <button id="downloadAuditTemplateBtn" style="width:100%; margin-top:8px; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer; display:none;">
+              📥 Download Comparison Template (Audit Type 2)
+          </button>
           <div style="text-align:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
               Pro Limit: 30 (Batched)
           </div>

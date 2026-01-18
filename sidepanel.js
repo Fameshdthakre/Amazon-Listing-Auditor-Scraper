@@ -82,8 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const statTotal = document.getElementById('statTotal');
   const statLqs = document.getElementById('statLqs');
   const statIssues = document.getElementById('statIssues');
+  const scraperAODWrapper = document.getElementById('scraperAODWrapper');
+  const bulkHintText = document.getElementById('bulkHintText');
+  const downloadAuditTemplateBtn = document.getElementById('downloadAuditTemplateBtn');
 
   // --- State Variables ---
+  let MEGA_MODE = 'scraper'; // 'scraper' or 'auditor'
   let mode = 'current'; 
   let rawCsvData = []; 
   let IS_LOGGED_IN = false; 
@@ -920,6 +924,56 @@ document.addEventListener('DOMContentLoaded', () => {
       loadWatchlist();
   }
 
+  // --- Mega Mode Switch Logic ---
+  const updateMegaModeUI = () => {
+      document.querySelectorAll('input[name="megaMode"]').forEach(r => {
+          if (r.checked) MEGA_MODE = r.value;
+      });
+
+      if (MEGA_MODE === 'scraper') {
+          // Tabs: Show Current, Hide Vendor
+          tabCurrent.style.display = 'flex';
+          tabVendor.style.display = 'none';
+
+          // Bulk: Hints
+          bulkHintText.textContent = "Upload CSV (Headers: URL) or Paste Links";
+          downloadAuditTemplateBtn.style.display = 'none';
+
+          // AOD Options
+          scraperAODWrapper.style.display = 'flex';
+          document.querySelector('label[for="scrapeAODBulk"]').parentElement.style.display = 'block';
+
+          // Force valid tab
+          if (mode === 'vendor') tabCurrent.click();
+          else if (mode === 'bulk' || mode === 'watchlist') {
+              // Stay on current if valid
+          } else {
+              tabCurrent.click();
+          }
+
+      } else {
+          // Auditor Mode
+          // Tabs: Hide Current, Show Vendor
+          tabCurrent.style.display = 'none';
+          tabVendor.style.display = 'flex';
+
+          // Bulk: Hints
+          bulkHintText.textContent = "Upload Comparison CSV";
+          downloadAuditTemplateBtn.style.display = 'block';
+
+          // AOD Options (Hidden for Auditor?)
+          scraperAODWrapper.style.display = 'none';
+          document.querySelector('label[for="scrapeAODBulk"]').parentElement.style.display = 'none';
+
+          // Force valid tab
+          if (mode === 'current') tabBulk.click();
+      }
+  };
+
+  document.querySelectorAll('input[name="megaMode"]').forEach(radio => {
+      radio.addEventListener('change', updateMegaModeUI);
+  });
+
   // --- Logic Load ---
   chrome.storage.local.get(['auditState'], (data) => {
     if (data.auditState) {
@@ -927,6 +981,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if(data.auditState.isScanning) {
           const m = data.auditState.mode;
           mode = m;
+          // Infer Mega Mode from stored state or context if needed,
+          // but for now let's just respect the UI default or last selection
+          // If scanning, hide sections
           currentSection.style.display = 'none';
           bulkSection.style.display = 'none';
           watchlistSection.style.display = 'none';
@@ -938,6 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
           else if(m === 'vendor') tabVendor.classList.add('active');
       }
     }
+    updateMegaModeUI();
   });
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -1092,6 +1150,58 @@ document.addEventListener('DOMContentLoaded', () => {
   pasteLinksBtn.addEventListener('click', () => handlePaste(GUEST_LIMIT, pasteStatus));
   pasteBtn.addEventListener('click', () => handlePaste(PRO_LIMIT, fileStatus));
 
+  // Enhanced CSV Parser for Type 2 Audit
+  const parseAuditType2Csv = (lines) => {
+      const headers = csvLineParser(lines[0]).map(h => h.toLowerCase().replace(/['"]+/g, '').trim());
+      const required = ['item_name', 'bullet_point', 'product_description', 'videos', 'aplus_image_modules', 'brand_story_images'];
+
+      // Determine if this is likely a Type 2 Audit
+      const hasComparisonData = required.some(r => headers.includes(r));
+      const asinIndex = headers.findIndex(h => h === 'asin' || h === 'url' || h === 'query_asin');
+
+      if (asinIndex === -1) return null; // Must have ASIN/URL
+
+      const structuredData = [];
+
+      for (let i = 1; i < lines.length; i++) {
+          const cols = csvLineParser(lines[i]);
+          if (!cols[asinIndex]) continue;
+
+          const rowData = {
+              url: cols[asinIndex].replace(/['"]+/g, ''),
+              auditType: hasComparisonData ? 'type2' : 'type1',
+              comparisonData: {}
+          };
+
+          if (hasComparisonData) {
+              required.forEach(field => {
+                  const idx = headers.indexOf(field);
+                  if (idx !== -1) {
+                      let val = cols[idx];
+                      // Attempt to parse JSON/Array strings like "[link1, link2]"
+                      if (val && (val.startsWith('[') || val.includes(',')) && (field.includes('videos') || field.includes('images'))) {
+                          try {
+                              // If wrapped in [], parse as JSON, else split by comma
+                              if (val.startsWith('[') && val.endsWith(']')) {
+                                  // Fix non-quoted items if necessary or just try parse
+                                  rowData.comparisonData[field] = JSON.parse(val.replace(/'/g, '"'));
+                              } else {
+                                  rowData.comparisonData[field] = val.split(',').map(s => s.trim());
+                              }
+                          } catch(e) {
+                              rowData.comparisonData[field] = val; // Fallback to raw string
+                          }
+                      } else {
+                          rowData.comparisonData[field] = val;
+                      }
+                  }
+              });
+          }
+          structuredData.push(rowData);
+      }
+      return structuredData;
+  };
+
   const handleFileSelect = (file, statusEl, modeType) => {
       const reader = new FileReader();
       reader.onload = function(event) {
@@ -1100,6 +1210,18 @@ document.addEventListener('DOMContentLoaded', () => {
           if (lines.length === 0) return;
 
           const firstLine = lines[0].toLowerCase();
+
+          if (MEGA_MODE === 'auditor') {
+              // Try parsing as Type 2 Audit CSV
+              const auditData = parseAuditType2Csv(lines);
+              if (auditData) {
+                  rawCsvData = auditData;
+                  const type2Count = auditData.filter(r => r.auditType === 'type2').length;
+                  statusEl.textContent = `Loaded ${auditData.length} items (${type2Count} w/ comparison data).`;
+                  statusEl.style.color = "var(--success)";
+                  return;
+              }
+          }
 
           if (modeType === 'vendor') {
               if (!firstLine.includes('asin') || !firstLine.includes('sku') || !firstLine.includes('vendorcode')) {
@@ -1169,9 +1291,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let urlsToProcess = [];
 
     if (mode === 'vendor') {
+        // This tab is now specific to "Type 2" or Vendor Auth audit
         if (!IS_LOGGED_IN) { alert("Login required."); return; }
         if (rawCsvData.length === 0) { alert("No Data Loaded."); return; }
-        urlsToProcess = rawCsvData; // Pass raw objects {asin, sku, vendorCode}
+        // For Auditor Mode, we might want to trigger dual scraping here if Type 2
+        urlsToProcess = rawCsvData.map(d => {
+             // If we loaded via parseAuditType2Csv, d has url/auditType.
+             // If via handleFileSelect vendor, d has asin/sku/vendorCode
+             if (d.auditType === 'type2') {
+                 // Construct DUAL Task
+                 const asin = d.url.match(/([A-Z0-9]{10})/)?.[1];
+                 if (!asin) return null;
+                 const pdpUrl = buildOrNormalizeUrl(d.url);
+                 const vcUrl = `https://vendorcentral.amazon.com/imaging/manage?asins=${asin}`;
+
+                 return [
+                     { url: pdpUrl, type: 'pdp', id: asin, comparisonData: d.comparisonData },
+                     { url: vcUrl, type: 'vc', id: asin }
+                 ];
+             } else {
+                 return d; // Fallback to raw object or standard scrape
+             }
+        }).flat().filter(Boolean);
+
     } else if (mode === 'current') {
        if (rawCsvData.length > 0) {
            let validUrls = rawCsvData.map(line => buildOrNormalizeUrl(line)).filter(u => u !== null);
@@ -1183,15 +1325,31 @@ document.addEventListener('DOMContentLoaded', () => {
        if(!IS_LOGGED_IN && urlsToProcess.length > GUEST_LIMIT) urlsToProcess = urlsToProcess.slice(0, GUEST_LIMIT);
        if(urlsToProcess.length === 0) { statusDiv.textContent = "No Amazon tabs found."; return; }
     } else {
+       // Bulk / Watchlist
        if (!IS_LOGGED_IN) { alert("Login required."); return; }
        if (rawCsvData.length === 0) { alert("No Data."); return; }
+
        urlsToProcess = rawCsvData.map(item => {
            if (typeof item === 'string') return buildOrNormalizeUrl(item);
            else {
+               // Handle Structured Data (Type 2 from Bulk Tab)
+               if (item.auditType === 'type2' && MEGA_MODE === 'auditor') {
+                   const url = buildOrNormalizeUrl(item.url);
+                   const asin = url ? url.match(/([A-Z0-9]{10})/)?.[1] : null;
+                   if (asin) {
+                       const vcUrl = `https://vendorcentral.amazon.com/imaging/manage?asins=${asin}`;
+                       return [
+                           { url: url, type: 'pdp', id: asin, comparisonData: item.comparisonData },
+                           { url: vcUrl, type: 'vc', id: asin }
+                       ];
+                   }
+                   return { ...item, url };
+               }
+
                const normUrl = buildOrNormalizeUrl(item.url);
                return normUrl ? { ...item, url: normUrl } : null;
            }
-       }).filter(u => u !== null);
+       }).flat().filter(u => u !== null);
        if(urlsToProcess.length === 0) { alert("No valid URLs."); return; }
     }
 
@@ -1316,7 +1474,25 @@ document.addEventListener('DOMContentLoaded', () => {
       dashboardView.style.display = 'grid';
   }
 
-  // --- Export Helpers ---
+  // --- Export Helpers & Strict Column Definitions ---
+
+  // 1. Scraping Mode Columns (Strict)
+  const SCRAPING_COLUMNS = [
+      'marketplace', 'deliveryLocation', 'queryASIN', 'mediaAsin', 'url', 'parentAsin', 'brand', 'metaTitle',
+      'bullets', 'bulletsCount', 'description', 'displayPrice', 'soldBy',
+      'freeDeliveryDate', 'primeOrFastestDeliveryDate', 'paidDeliveryDate',
+      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails'
+      // Note: 'full list of sellers' is handled via secondary tab 'offers' if AOD data exists
+  ];
+
+  // 2. Audit Mode Columns (Superset including booleans and counts)
+  const AUDIT_COLUMNS = [
+      ...SCRAPING_COLUMNS,
+      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
+      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
+      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
+  ];
+
   const MASTER_COLUMNS = [
     { key: 'status', header: 'status' },
     { key: 'marketplace', header: 'marketplace' },
@@ -1325,24 +1501,27 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'queryASIN', header: 'query_asin' },
     { key: 'mediaAsin', header: 'page_asin' },
     { key: 'parentAsin', header: 'parent_asin' },
-    { key: 'lqs', header: 'listing_quality_score' },
+    { key: 'brand', header: 'brand' },
+    { key: 'metaTitle', header: 'item_name' },
+    { key: 'bullets', header: 'bullet_point' },
+    { key: 'bulletsCount', header: 'bullet_point_count' },
+    { key: 'description', header: 'product_description' },
     { key: 'displayPrice', header: 'list_price' },
-    { key: 'stockStatus', header: 'stock_status' },
-    { key: 'freeDeliveryDate', header: 'free_delivery_date' },
-    { key: 'paidDeliveryDate', header: 'paid_delivery_date' },
-    { key: 'primeOrFastestDeliveryDate', header: 'prime_fastest_delivery_date' },
     { key: 'soldBy', header: 'sold_by' },
+    { key: 'freeDeliveryDate', header: 'free_delivery_date' },
+    { key: 'primeOrFastestDeliveryDate', header: 'prime_fastest_delivery_date' },
+    { key: 'paidDeliveryDate', header: 'paid_delivery_date' },
     { key: 'rating', header: 'rating' },
     { key: 'reviews', header: 'reviews' },
     { key: 'bsr', header: 'best_sellers_rank' },
-    { key: 'brand', header: 'brand' },
-    { key: 'metaTitle', header: 'item_name' },
+    { key: 'imgVariantCount', header: 'product_image_count' },
+    { key: 'imgVariantDetails', header: 'product_image_details' },
+    // Audit Specific Below
+    { key: 'lqs', header: 'listing_quality_score' },
+    { key: 'stockStatus', header: 'stock_status' },
     { key: 'hasBullets', header: 'has_bullet_point' },
-    { key: 'bulletsCount', header: 'bullet_point_count' },
-    { key: 'bullets', header: 'bullet_point' },
     { key: 'hasDescription', header: 'has_product_description' },
-    { key: 'description', header: 'product_description' },
-    { key: 'variationExists', header: 'has_variation' },
+    { key: 'hasVariation', header: 'has_variation' }, // mapped from variationExists
     { key: 'variationTheme', header: 'variation_theme' },
     { key: 'variationCount', header: 'variation_family_count' },
     { key: 'variationFamily', header: 'variation_family' },
@@ -1352,9 +1531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'aPlusImgs', header: 'aplus_image_modules' },
     { key: 'hasVideo', header: 'has_video' },
     { key: 'videoCount', header: 'videos_count' },
-    { key: 'videos', header: 'videos' },
-    { key: 'imgVariantCount', header: 'product_image_count' },
-    { key: 'imgVariantDetails', header: 'product_image_details' }
+    { key: 'videos', header: 'videos' }
   ];
 
   const forcedFields = ['marketplace', 'deliveryLocation', 'mediaAsin', 'url', 'queryASIN'];
@@ -1401,12 +1578,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const getExportData = async () => {
     const data = await chrome.storage.local.get('auditState');
-    const results = data.auditState ? data.auditState.results : [];
+    let results = data.auditState ? data.auditState.results : [];
     if (!results || results.length === 0) return null;
 
+    // --- Type 2 Audit Merge Logic ---
+    // If multiple results exist for same ID (one PDP, one VC), merge them.
+    if (MEGA_MODE === 'auditor') {
+        const mergedMap = new Map();
+        results.forEach(res => {
+            const id = res.id || res.queryASIN || res.attributes?.mediaAsin || res.url; // Use ID from dual-task if available
+            if (!mergedMap.has(id)) mergedMap.set(id, {});
+
+            const existing = mergedMap.get(id);
+
+            if (res.isVC) {
+                existing.vcData = res; // Store VC result
+            } else {
+                existing.pdpData = res; // Store PDP result
+            }
+            // Preserve comparison inputs if attached to either
+            if (res.comparisonData) existing.comparisonData = res.comparisonData;
+        });
+
+        // Flatten back to array, using PDP as base if exists, else VC
+        results = Array.from(mergedMap.values()).map(merged => {
+            const base = merged.pdpData || merged.vcData;
+            if (!base) return null;
+            // Attach merged parts
+            base.vcData = merged.vcData;
+            base.comparisonData = merged.comparisonData;
+            return base;
+        }).filter(Boolean);
+    }
+
     const checkedValues = Array.from(document.querySelectorAll('.attr-checkbox:checked')).map(cb => cb.value);
-    const selectedFields = [...new Set([...forcedFields, ...checkedValues])];
+    let selectedFields = [...new Set([...forcedFields, ...checkedValues])];
     
+    // Filter based on Mega Mode Strictness
+    const ALLOWED_SET = (MEGA_MODE === 'scraper') ? SCRAPING_COLUMNS : AUDIT_COLUMNS;
+    selectedFields = selectedFields.filter(f => ALLOWED_SET.includes(f) || forcedFields.includes(f));
+
     // Sort fields based on MASTER_COLUMNS sequence
     const finalFields = [];
     MASTER_COLUMNS.forEach(col => {
@@ -1426,10 +1637,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Construct Header list with correct order
     const finalHeaders = finalFields.map(f => keyToHeader[f] || f);
     
-    // Add expected headers if data exists
-    const hasExpectedData = results.some(r => r.expected);
-    if (hasExpectedData) {
-        finalHeaders.push("Expected Title", "Title Match", "Expected Bullets", "Bullets Match", "Initial Price", "Price Change");
+    // Add Comparison Headers if Audit Mode
+    if (MEGA_MODE === 'auditor') {
+        const auditHeaders = [
+            "User: Title", "Match: Title",
+            "User: Bullets", "Match: Bullets",
+            "User: Description", "Match: Description",
+            "User: Images", "Match: User Images",
+            "VC: Images", "Match: VC Images",
+            "User: Videos", "Match: Videos",
+            "User: A+", "Match: A+",
+            "User: Brand Story", "Match: Brand Story"
+        ];
+        finalHeaders.push(...auditHeaders);
+    } else {
+        // Legacy Watchlist Comparison (if scraping mode but watchlist used)
+        const hasExpectedData = results.some(r => r.expected);
+        if (hasExpectedData) {
+            finalHeaders.push("Expected Title", "Title Match", "Expected Bullets", "Bullets Match", "Initial Price", "Price Change");
+        }
     }
 
     let csvHeader = finalHeaders.join(",") + "\n";
@@ -1586,60 +1812,77 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- Vendor Central Specific Logic ---
-        if (tabData.vcData) {
-            // Inject VC specific columns or override
-            // For now, let's just ensure we output the identifying info if it was a VC scan
-            // Since we use MASTER_COLUMNS, we might need to add specific VC columns there later.
-            // But user asked for specific attributes extraction.
-            // Let's add them to the row object if they exist in the result.
-            // Assuming 'result' structure for VC scan: { isVC: true, item_name, ... }
-            // Wait, result structure from background for VC is passed as `tabData`.
-            // But `extractSingleTab` returns `res` which is from content.js `scrapeVendorCentral`.
+        // --- Audit Mode Comparisons (Type 2) ---
+        if (MEGA_MODE === 'auditor') {
+            const comp = tabData.comparisonData || {};
 
-            // Check if this result IS a VC result (structure differs from Amazon PDP)
-            if (tabData.isVC) {
-                // Map VC fields to standard columns or add new ones to export
-                row['item_name'] = tabData.item_name;
-                row['product_description'] = tabData.product_description;
-                row['list_price'] = tabData.list_price;
-                if (tabData.bullet_points) row['bullet_point'] = tabData.bullet_points.join(' | ');
+            // 1. Title
+            const userTitle = comp.item_name || "none";
+            row['User: Title'] = userTitle;
+            row['Match: Title'] = (userTitle !== "none" && tabData.attributes.metaTitle === userTitle) ? "TRUE" : "FALSE";
 
-                // Images
-                if (tabData.images) {
-                    row['product_image_count'] = tabData.images.length;
-                    row['product_image_details'] = JSON.stringify(tabData.images);
-                }
-            }
-        }
+            // 2. Bullets
+            const userBullets = comp.bullet_point || "none";
+            row['User: Bullets'] = userBullets;
+            // Simple logic: check if user text is contained in scraped bullets
+            row['Match: Bullets'] = (userBullets !== "none" && tabData.attributes.bullets.includes(userBullets)) ? "TRUE" : "FALSE";
 
-        if (hasExpectedData) {
-            if (tabData.expected && !tabData.error) {
-                const expTitle = tabData.expected.title || "none";
-                const actTitle = tabData.attributes.metaTitle || "none";
-                const titleMatch = (expTitle !== "none" && expTitle === actTitle) ? "TRUE" : (expTitle === "none" ? "-" : "FALSE");
-                row['Expected Title'] = expTitle;
-                row['Title Match'] = titleMatch;
+            // 3. Description
+            const userDesc = comp.product_description || "none";
+            row['User: Description'] = userDesc;
+            row['Match: Description'] = (userDesc !== "none" && tabData.attributes.description.includes(userDesc)) ? "TRUE" : "FALSE";
 
-                const expBullets = tabData.expected.bullets || "none";
-                const actBullets = tabData.attributes.bullets || "none";
-                const bulletMatch = (expBullets !== "none" && expBullets === actBullets) ? "TRUE" : (expBullets === "none" ? "-" : "FALSE");
-                row['Expected Bullets'] = expBullets;
-                row['Bullets Match'] = bulletMatch;
+            // 4. Images (User provided)
+            const userImgs = comp.product_image_details || [];
+            row['User: Images'] = Array.isArray(userImgs) ? JSON.stringify(userImgs) : userImgs;
+            // Complex match? For now just existence
+            row['Match: User Images'] = (Array.isArray(userImgs) && userImgs.length > 0 && tabData.data.length >= userImgs.length) ? "TRUE" : "FALSE";
 
-                const initPrice = tabData.expected.price || "none";
-                const currPrice = tabData.attributes.displayPrice || "none";
-                const priceChange = (initPrice !== "none" && initPrice !== currPrice) ? "CHANGED" : "-";
-                row['Initial Price'] = initPrice;
-                row['Price Change'] = priceChange;
-            } else {
-                row['Expected Title'] = "";
-                row['Title Match'] = "";
-                row['Expected Bullets'] = "";
-                row['Bullets Match'] = "";
-                row['Initial Price'] = "";
-                row['Price Change'] = "";
-            }
+            // 5. Images (VC provided)
+            const vcImgs = tabData.vcData ? tabData.vcData.images : [];
+            row['VC: Images'] = vcImgs ? JSON.stringify(vcImgs) : "none";
+            // Check if VC images exist in PDP data (by URL or count)
+            // Ideally we check if every VC image URL is present in PDP data.
+            // But VC URLs might differ from PDP display URLs (resizing).
+            // Fallback: Check Count
+            row['Match: VC Images'] = (vcImgs && vcImgs.length > 0 && tabData.data.length >= vcImgs.length) ? "TRUE" : "FALSE";
+
+            // 6. Videos
+            const userVids = comp.videos || [];
+            row['User: Videos'] = Array.isArray(userVids) ? JSON.stringify(userVids) : userVids;
+            row['Match: Videos'] = (Array.isArray(userVids) && userVids.length > 0 && tabData.attributes.videoCount >= userVids.length) ? "TRUE" : "FALSE";
+
+            // 7. A+
+            const userAplus = comp.aplus_image_modules || [];
+            row['User: A+'] = Array.isArray(userAplus) ? JSON.stringify(userAplus) : userAplus;
+            row['Match: A+'] = (Array.isArray(userAplus) && userAplus.length > 0 && tabData.attributes.aPlusImgs.length >= userAplus.length) ? "TRUE" : "FALSE";
+
+            // 8. Brand Story
+            const userBs = comp.brand_story_images || [];
+            row['User: Brand Story'] = Array.isArray(userBs) ? JSON.stringify(userBs) : userBs;
+            row['Match: Brand Story'] = (Array.isArray(userBs) && userBs.length > 0 && tabData.attributes.brandStoryImgs.length >= userBs.length) ? "TRUE" : "FALSE";
+
+        } else if (tabData.expected && !tabData.error) {
+            // Legacy Watchlist Comparison
+            const expTitle = tabData.expected.title || "none";
+            const actTitle = tabData.attributes.metaTitle || "none";
+            const titleMatch = (expTitle !== "none" && expTitle === actTitle) ? "TRUE" : (expTitle === "none" ? "-" : "FALSE");
+            row['Expected Title'] = expTitle;
+            row['Title Match'] = titleMatch;
+
+            const expBullets = tabData.expected.bullets || "none";
+            const actBullets = tabData.attributes.bullets || "none";
+            const bulletMatch = (expBullets !== "none" && expBullets === actBullets) ? "TRUE" : (expBullets === "none" ? "-" : "FALSE");
+            row['Expected Bullets'] = expBullets;
+            row['Bullets Match'] = bulletMatch;
+
+            const initPrice = tabData.expected.price || "none";
+            const currPrice = tabData.attributes.displayPrice || "none";
+            const priceChange = (initPrice !== "none" && initPrice !== currPrice) ? "CHANGED" : "-";
+            row['Initial Price'] = initPrice;
+            row['Price Change'] = priceChange;
+        } else {
+            // Fill empty if needed, or leave undefined
         }
         
         // Generate CSV Line from row object using header order
@@ -2079,6 +2322,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Insert download button in Watchlist section
   document.getElementById('watchlistSection').appendChild(downloadTemplateBtn);
+
+  // Template Download for Audit Type 2
+  downloadAuditTemplateBtn.addEventListener('click', () => {
+      const headers = [
+          'ASIN',
+          'item_name',
+          'bullet_point',
+          'product_description',
+          'videos',
+          'aplus_image_modules',
+          'brand_story_images'
+      ];
+      const csvContent = headers.join(",") + "\n" + "B00EXAMPLE,My Title,Bullet 1|Bullet 2,Desc,[link1,link2],[link1],[link1]";
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "Audit_Comparison_Template.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  });
   // --- Feature: Visual Tracker (Chart.js) ---
   const chartModal = document.getElementById('chartModal');
   const closeChartBtn = document.getElementById('closeChartBtn');
