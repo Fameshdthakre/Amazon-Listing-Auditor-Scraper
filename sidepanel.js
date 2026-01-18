@@ -930,6 +930,9 @@ document.addEventListener('DOMContentLoaded', () => {
           if (r.checked) MEGA_MODE = r.value;
       });
 
+      // Hide Watchlist Everywhere for now
+      tabWatchlist.style.display = 'none';
+
       if (MEGA_MODE === 'scraper') {
           // Tabs: Show Current, Hide Vendor
           tabCurrent.style.display = 'flex';
