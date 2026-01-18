@@ -12,8 +12,16 @@
     "storage",
     "alarms",
     "clipboardRead",
-    "sidePanel"
+    "sidePanel",
+    "declarativeNetRequest"
   ],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "ruleset_1",
+      "enabled": false,
+      "path": "rules.json"
+    }]
+  },
   "side_panel": {
     "default_path": "sidepanel.html"
   },

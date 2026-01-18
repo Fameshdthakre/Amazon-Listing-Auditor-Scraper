@@ -1,4 +1,6 @@
 import { app, db } from './firebase/firebase-config.js';
+  import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
+  import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
 
 document.addEventListener('DOMContentLoaded', () => {
   // Elements
@@ -19,10 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Tabs & Sections
   const tabCurrent = document.getElementById('tabCurrent');
   const tabBulk = document.getElementById('tabBulk');
-  const tabWatchlist = document.getElementById('tabWatchlist'); 
+  const tabWatchlist = document.getElementById('tabWatchlist');
+  const tabVendor = document.getElementById('tabVendor');
   const bulkSection = document.getElementById('bulkSection');
   const currentSection = document.getElementById('currentSection'); 
-  const watchlistSection = document.getElementById('watchlistSection'); 
+  const watchlistSection = document.getElementById('watchlistSection');
+  const vendorSection = document.getElementById('vendorSection');
   
   const pasteLinksBtn = document.getElementById('pasteLinksBtn'); 
   const snapshotBtn = document.getElementById('snapshotBtn'); 
@@ -33,7 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const importWatchlistBtn = document.getElementById('importWatchlistBtn'); 
   const batchSizeInput = document.getElementById('batchSizeInput');
   const disableImagesInput = document.getElementById('disableImages');
+  const scrapeAODCurrent = document.getElementById('scrapeAODCurrent');
+  const scrapeAODBulk = document.getElementById('scrapeAODBulk');
   const fileStatus = document.getElementById('fileStatus');
+  const vendorFileStatus = document.getElementById('vendorFileStatus');
+  const vendorCsvInput = document.getElementById('vendorCsvInput');
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
   const domainSelect = document.getElementById('domainSelect');
@@ -74,8 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const statTotal = document.getElementById('statTotal');
   const statLqs = document.getElementById('statLqs');
   const statIssues = document.getElementById('statIssues');
+  const scraperAODWrapper = document.getElementById('scraperAODWrapper');
+  const bulkHintText = document.getElementById('bulkHintText');
+  const downloadAuditTemplateBtn = document.getElementById('downloadAuditTemplateBtn');
 
   // --- State Variables ---
+  let MEGA_MODE = 'scraper'; // 'scraper' or 'auditor'
   let mode = 'current'; 
   let rawCsvData = []; 
   let IS_LOGGED_IN = false; 
@@ -229,32 +241,62 @@ document.addEventListener('DOMContentLoaded', () => {
       loadWatchlist();
   });
 
+  // --- Input Modal Logic ---
+  const inputModal = document.getElementById('inputModal');
+  const inputModalTitle = document.getElementById('inputModalTitle');
+  const closeInputModalBtn = document.getElementById('closeInputModalBtn');
+  const watchlistNameInput = document.getElementById('watchlistNameInput');
+  const saveInputBtn = document.getElementById('saveInputBtn');
+
+  let inputModalAction = null; // 'create' or 'rename'
+
+  closeInputModalBtn.addEventListener('click', () => inputModal.close());
+
   newWatchlistBtn.addEventListener('click', () => {
-      const name = prompt("Enter new watchlist name:");
-      if (name) {
-          const id = "wl_" + Date.now();
-          const key = getWatchlistContainerKey();
-          chrome.storage.local.get([key], (data) => {
-              const container = data[key] || {};
-              container[id] = { name: name, items: [], template: [] };
-              chrome.storage.local.set({ [key]: container }, () => {
-                  currentWatchlistId = id;
-                  // Trigger template selection for new list (Feature 2 stub)
-                  selectAttributesForTemplate(id);
-              });
-          });
-      }
+      inputModalTitle.textContent = "Create New Watchlist";
+      watchlistNameInput.value = "";
+      inputModalAction = 'create';
+      inputModal.showModal();
   });
 
   renameWatchlistBtn.addEventListener('click', () => {
+      // Need to fetch current name to pre-fill
       const key = getWatchlistContainerKey();
       chrome.storage.local.get([key], (data) => {
           const container = data[key];
           if (container && container[currentWatchlistId]) {
-              const newName = prompt("Rename watchlist:", container[currentWatchlistId].name);
-              if (newName) {
-                  container[currentWatchlistId].name = newName;
-                  chrome.storage.local.set({ [key]: container }, loadWatchlist);
+             inputModalTitle.textContent = "Rename Watchlist";
+             watchlistNameInput.value = container[currentWatchlistId].name;
+             inputModalAction = 'rename';
+             inputModal.showModal();
+          }
+      });
+  });
+
+  saveInputBtn.addEventListener('click', () => {
+      const name = watchlistNameInput.value.trim();
+      if (!name) { alert("Please enter a name."); return; }
+
+      const key = getWatchlistContainerKey();
+      chrome.storage.local.get([key], (data) => {
+          const container = data[key] || {};
+
+          if (inputModalAction === 'create') {
+              const id = "wl_" + Date.now();
+              container[id] = { name: name, items: [], template: [] };
+              chrome.storage.local.set({ [key]: container }, () => {
+                  currentWatchlistId = id;
+                  inputModal.close();
+                  // Open Template Selection
+                  selectAttributesForTemplate(id);
+              });
+          } else if (inputModalAction === 'rename') {
+              if (container[currentWatchlistId]) {
+                  container[currentWatchlistId].name = name;
+                  chrome.storage.local.set({ [key]: container }, () => {
+                      loadWatchlist();
+                      inputModal.close();
+                  });
               }
           }
       });
@@ -664,6 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
           clearBtn.style.background = "var(--surface)";
           clearConfirmMsg.style.display = "none";
           statusDiv.textContent = "Data cleared.";
+          progressCountDiv.style.display = 'none'; // Fix: Hide processed count
           fileStatus.textContent = "";
           pasteStatus.textContent = ""; 
           rawCsvData = []; 
@@ -804,6 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Update UI immediately
       updateUIForAuth();
+      statusDiv.textContent = "Logged in."; // Fix: Update status message
 
       // Attempt Firebase Sign-in to enable Firestore access
       try {
@@ -846,33 +890,89 @@ document.addEventListener('DOMContentLoaded', () => {
           tabBulk.querySelector('.lock-icon').style.display = 'none';
           
           tabWatchlist.classList.remove('disabled');
-          // No lock icon query here
+          tabVendor.classList.remove('disabled');
+          tabVendor.querySelector('.lock-icon').style.display = 'none';
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.disabled = false; el.checked = true; });
           document.querySelectorAll('.group-select').forEach(el => el.disabled = false);
+          document.querySelectorAll('.tpl-group-select').forEach(el => el.disabled = false);
           selectAllCheckbox.disabled = false;
       } else {
           googleBtn.style.display = 'flex';
           msBtn.style.display = 'flex';
           logoutBtn.style.display = 'none';
           
-          if (mode === 'bulk' && !document.getElementById('stopBtn').offsetParent) tabCurrent.click();
+          if ((mode === 'bulk' || mode === 'vendor') && !document.getElementById('stopBtn').offsetParent) tabCurrent.click();
           
           tabBulk.classList.add('disabled');
           tabBulk.querySelector('.lock-icon').style.display = 'inline';
           
           tabWatchlist.classList.remove('disabled');
-          // No lock icon query here
+
+          tabVendor.classList.add('disabled');
+          tabVendor.querySelector('.lock-icon').style.display = 'inline';
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.checked = false; el.disabled = true; });
           document.querySelector('.group-select[data-group="advanced"]').disabled = true;
           document.querySelector('.group-select[data-group="content"]').disabled = true;
+          document.querySelector('.tpl-group-select[data-group="advanced"]').disabled = true;
+          document.querySelector('.tpl-group-select[data-group="content"]').disabled = true;
           selectAllCheckbox.checked = false;
           selectAllCheckbox.disabled = true;
       }
       loadCheckboxState(); 
       loadWatchlist();
   }
+
+  // --- Mega Mode Switch Logic ---
+  const updateMegaModeUI = () => {
+      document.querySelectorAll('input[name="megaMode"]').forEach(r => {
+          if (r.checked) MEGA_MODE = r.value;
+      });
+
+      if (MEGA_MODE === 'scraper') {
+          // Tabs: Show Current, Hide Vendor
+          tabCurrent.style.display = 'flex';
+          tabVendor.style.display = 'none';
+
+          // Bulk: Hints
+          bulkHintText.textContent = "Upload CSV (Headers: URL) or Paste Links";
+          downloadAuditTemplateBtn.style.display = 'none';
+
+          // AOD Options
+          scraperAODWrapper.style.display = 'flex';
+          document.querySelector('label[for="scrapeAODBulk"]').parentElement.style.display = 'block';
+
+          // Force valid tab
+          if (mode === 'vendor') tabCurrent.click();
+          else if (mode === 'bulk' || mode === 'watchlist') {
+              // Stay on current if valid
+          } else {
+              tabCurrent.click();
+          }
+
+      } else {
+          // Auditor Mode
+          // Tabs: Hide Current, Show Vendor
+          tabCurrent.style.display = 'none';
+          tabVendor.style.display = 'flex';
+
+          // Bulk: Hints
+          bulkHintText.textContent = "Upload Comparison CSV";
+          downloadAuditTemplateBtn.style.display = 'block';
+
+          // AOD Options (Hidden for Auditor?)
+          scraperAODWrapper.style.display = 'none';
+          document.querySelector('label[for="scrapeAODBulk"]').parentElement.style.display = 'none';
+
+          // Force valid tab
+          if (mode === 'current') tabBulk.click();
+      }
+  };
+
+  document.querySelectorAll('input[name="megaMode"]').forEach(radio => {
+      radio.addEventListener('change', updateMegaModeUI);
+  });
 
   // --- Logic Load ---
   chrome.storage.local.get(['auditState'], (data) => {
@@ -881,15 +981,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if(data.auditState.isScanning) {
           const m = data.auditState.mode;
           mode = m;
+          // Infer Mega Mode from stored state or context if needed,
+          // but for now let's just respect the UI default or last selection
+          // If scanning, hide sections
           currentSection.style.display = 'none';
           bulkSection.style.display = 'none';
           watchlistSection.style.display = 'none';
+          vendorSection.style.display = 'none';
           document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
           if(m === 'current') tabCurrent.classList.add('active'); 
           else if(m === 'bulk') tabBulk.classList.add('active'); 
           else if(m === 'watchlist') tabWatchlist.classList.add('active');
+          else if(m === 'vendor') tabVendor.classList.add('active');
       }
     }
+    updateMegaModeUI();
   });
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -972,8 +1078,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tabCurrent.classList.add('active');
     tabBulk.classList.remove('active');
     tabWatchlist.classList.remove('active');
+    tabVendor.classList.remove('active');
     bulkSection.style.display = 'none';
     watchlistSection.style.display = 'none';
+    vendorSection.style.display = 'none';
     currentSection.style.display = 'block'; 
     scanBtn.textContent = 'Start Audit (Current Tabs)';
   });
@@ -984,9 +1092,11 @@ document.addEventListener('DOMContentLoaded', () => {
     tabBulk.classList.add('active');
     tabCurrent.classList.remove('active');
     tabWatchlist.classList.remove('active');
+    tabVendor.classList.remove('active');
     bulkSection.style.display = 'block';
     currentSection.style.display = 'none'; 
     watchlistSection.style.display = 'none';
+    vendorSection.style.display = 'none';
     scanBtn.textContent = 'Start Bulk Audit';
   });
 
@@ -995,10 +1105,26 @@ document.addEventListener('DOMContentLoaded', () => {
       tabWatchlist.classList.add('active');
       tabCurrent.classList.remove('active');
       tabBulk.classList.remove('active');
+      tabVendor.classList.remove('active');
       watchlistSection.style.display = 'block';
       bulkSection.style.display = 'none';
       currentSection.style.display = 'none'; 
+      vendorSection.style.display = 'none';
       loadWatchlist(); 
+  });
+
+  tabVendor.addEventListener('click', () => {
+      if (!IS_LOGGED_IN) { alert("Please Login."); return; }
+      mode = 'vendor';
+      tabVendor.classList.add('active');
+      tabCurrent.classList.remove('active');
+      tabBulk.classList.remove('active');
+      tabWatchlist.classList.remove('active');
+      vendorSection.style.display = 'block';
+      bulkSection.style.display = 'none';
+      currentSection.style.display = 'none';
+      watchlistSection.style.display = 'none';
+      scanBtn.textContent = 'Start Vendor Audit';
   });
 
   const handlePaste = async (limit, statusEl) => {
@@ -1024,51 +1150,184 @@ document.addEventListener('DOMContentLoaded', () => {
   pasteLinksBtn.addEventListener('click', () => handlePaste(GUEST_LIMIT, pasteStatus));
   pasteBtn.addEventListener('click', () => handlePaste(PRO_LIMIT, fileStatus));
 
-  csvInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(event) {
-      const text = event.target.result;
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length === 0) return;
+  // Enhanced CSV Parser for Type 2 Audit
+  const parseAuditType2Csv = (lines) => {
+      const headers = csvLineParser(lines[0]).map(h => h.toLowerCase().replace(/['"]+/g, '').trim());
+      const required = ['item_name', 'bullet_point', 'product_description', 'videos', 'aplus_image_modules', 'brand_story_images'];
 
-      const firstLine = lines[0].toLowerCase();
-      if (firstLine.includes(',') && (firstLine.includes('url') || firstLine.includes('asin'))) {
-          const headers = csvLineParser(lines[0]).map(h => h.toLowerCase().replace(/['"]+/g, ''));
-          const urlIndex = headers.findIndex(h => h.includes('url') || h.includes('asin'));
-          const titleIndex = headers.findIndex(h => h.includes('expected title'));
-          const bulletIndex = headers.findIndex(h => h.includes('expected bullets'));
+      // Determine if this is likely a Type 2 Audit
+      const hasComparisonData = required.some(r => headers.includes(r));
+      const asinIndex = headers.findIndex(h => h === 'asin' || h === 'url' || h === 'query_asin');
 
-          if (urlIndex === -1) { fileStatus.textContent = "Error: Missing URL/ASIN column."; return; }
+      if (asinIndex === -1) return null; // Must have ASIN/URL
 
-          const structuredData = [];
-          for (let i = 1; i < lines.length; i++) {
-              const cols = csvLineParser(lines[i]);
-              if (cols[urlIndex]) {
-                  structuredData.push({
-                      url: cols[urlIndex].replace(/['"]+/g, ''),
-                      expected: {
-                          title: titleIndex !== -1 ? cols[titleIndex].replace(/['"]+/g, '') : null,
-                          bullets: bulletIndex !== -1 ? cols[bulletIndex].replace(/['"]+/g, '') : null
+      const structuredData = [];
+
+      for (let i = 1; i < lines.length; i++) {
+          const cols = csvLineParser(lines[i]);
+          if (!cols[asinIndex]) continue;
+
+          const rowData = {
+              url: cols[asinIndex].replace(/['"]+/g, ''),
+              auditType: hasComparisonData ? 'type2' : 'type1',
+              comparisonData: {}
+          };
+
+          if (hasComparisonData) {
+              required.forEach(field => {
+                  const idx = headers.indexOf(field);
+                  if (idx !== -1) {
+                      let val = cols[idx];
+                      // Attempt to parse JSON/Array strings like "[link1, link2]"
+                      if (val && (val.startsWith('[') || val.includes(',')) && (field.includes('videos') || field.includes('images'))) {
+                          try {
+                              // If wrapped in [], parse as JSON, else split by comma
+                              if (val.startsWith('[') && val.endsWith(']')) {
+                                  // Fix non-quoted items if necessary or just try parse
+                                  rowData.comparisonData[field] = JSON.parse(val.replace(/'/g, '"'));
+                              } else {
+                                  rowData.comparisonData[field] = val.split(',').map(s => s.trim());
+                              }
+                          } catch(e) {
+                              rowData.comparisonData[field] = val; // Fallback to raw string
+                          }
+                      } else {
+                          rowData.comparisonData[field] = val;
                       }
-                  });
+                  }
+              });
+          }
+          structuredData.push(rowData);
+      }
+      return structuredData;
+  };
+
+  const getVendorCentralDomain = (marketplace) => {
+      const na = ['Amazon.com', 'Amazon.ca'];
+      const eu = ['Amazon.co.uk', 'Amazon.de', 'Amazon.fr', 'Amazon.it', 'Amazon.es', 'Amazon.nl', 'Amazon.se', 'Amazon.com.be', 'Amazon.pl'];
+      const au = ['Amazon.com.au'];
+
+      if (na.includes(marketplace)) return 'vendorcentral.amazon.com';
+      if (eu.includes(marketplace)) return 'vendorcentral.amazon.co.uk';
+      if (au.includes(marketplace)) return 'vendorcentral.amazon.com.au';
+
+      return 'vendorcentral.amazon.com'; // Default
+  };
+
+  const handleFileSelect = (file, statusEl, modeType) => {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+          const text = event.target.result;
+          const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+          if (lines.length === 0) return;
+
+          const firstLine = lines[0].toLowerCase();
+
+          if (MEGA_MODE === 'auditor') {
+              // Try parsing as Type 2 Audit CSV
+              const auditData = parseAuditType2Csv(lines);
+              if (auditData) {
+                  rawCsvData = auditData;
+                  const type2Count = auditData.filter(r => r.auditType === 'type2').length;
+                  statusEl.textContent = `Loaded ${auditData.length} items (${type2Count} w/ comparison data).`;
+                  statusEl.style.color = "var(--success)";
+                  return;
               }
           }
-          rawCsvData = structuredData;
-          fileStatus.textContent = `Loaded ${structuredData.length} structured rows.`;
-      } else {
-          rawCsvData = lines.map(line => line.trim());
-          fileStatus.textContent = `Loaded ${lines.length} lines.`;
-      }
-      fileStatus.style.color = "var(--success)";
-    };
-    reader.readAsText(file);
-  });
+
+          if (modeType === 'vendor') {
+              if (!firstLine.includes('asin') || !firstLine.includes('sku') || !firstLine.includes('vendorcode')) {
+                  statusEl.textContent = "Error: Headers must match ASIN, SKU, VendorCode";
+                  statusEl.style.color = "var(--danger)";
+                  return;
+              }
+              const headers = csvLineParser(lines[0]).map(h => h.toLowerCase().replace(/['"]+/g, ''));
+              const asinIdx = headers.findIndex(h => h === 'asin');
+              const skuIdx = headers.findIndex(h => h === 'sku');
+              const vendorIdx = headers.findIndex(h => h === 'vendorcode');
+
+              const structuredData = [];
+              for (let i = 1; i < lines.length; i++) {
+                  const cols = csvLineParser(lines[i]);
+                  if (cols[asinIdx] && cols[skuIdx] && cols[vendorIdx]) {
+                      structuredData.push({
+                          asin: cols[asinIdx].replace(/['"]+/g, ''),
+                          sku: cols[skuIdx].replace(/['"]+/g, ''),
+                          vendorCode: cols[vendorIdx].replace(/['"]+/g, '')
+                      });
+                  }
+              }
+              rawCsvData = structuredData;
+              statusEl.textContent = `Loaded ${structuredData.length} VC rows.`;
+              statusEl.style.color = "var(--success)";
+
+          } else {
+              // Regular Bulk Mode
+              if (firstLine.includes(',') && (firstLine.includes('url') || firstLine.includes('asin'))) {
+                  const headers = csvLineParser(lines[0]).map(h => h.toLowerCase().replace(/['"]+/g, ''));
+                  const urlIndex = headers.findIndex(h => h.includes('url') || h.includes('asin'));
+                  const titleIndex = headers.findIndex(h => h.includes('expected title'));
+                  const bulletIndex = headers.findIndex(h => h.includes('expected bullets'));
+
+                  if (urlIndex === -1) { statusEl.textContent = "Error: Missing URL/ASIN column."; return; }
+
+                  const structuredData = [];
+                  for (let i = 1; i < lines.length; i++) {
+                      const cols = csvLineParser(lines[i]);
+                      if (cols[urlIndex]) {
+                          structuredData.push({
+                              url: cols[urlIndex].replace(/['"]+/g, ''),
+                              expected: {
+                                  title: titleIndex !== -1 ? cols[titleIndex].replace(/['"]+/g, '') : null,
+                                  bullets: bulletIndex !== -1 ? cols[bulletIndex].replace(/['"]+/g, '') : null
+                              }
+                          });
+                      }
+                  }
+                  rawCsvData = structuredData;
+                  statusEl.textContent = `Loaded ${structuredData.length} structured rows.`;
+              } else {
+                  rawCsvData = lines.map(line => line.trim());
+                  statusEl.textContent = `Loaded ${lines.length} lines.`;
+              }
+              statusEl.style.color = "var(--success)";
+          }
+      };
+      reader.readAsText(file);
+  };
+
+  csvInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], fileStatus, 'bulk'));
+  vendorCsvInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], vendorFileStatus, 'vendor'));
 
   scanBtn.addEventListener('click', async () => {
     let urlsToProcess = [];
-    if (mode === 'current') {
+
+    if (mode === 'vendor') {
+        // This tab is now specific to "Type 2" or Vendor Auth audit
+        if (!IS_LOGGED_IN) { alert("Login required."); return; }
+        if (rawCsvData.length === 0) { alert("No Data Loaded."); return; }
+        // For Auditor Mode, we might want to trigger dual scraping here if Type 2
+        urlsToProcess = rawCsvData.map(d => {
+             // If we loaded via parseAuditType2Csv, d has url/auditType.
+             // If via handleFileSelect vendor, d has asin/sku/vendorCode
+             if (d.auditType === 'type2') {
+                 // Construct DUAL Task
+                 const asin = d.url.match(/([A-Z0-9]{10})/)?.[1];
+                 if (!asin) return null;
+                 const pdpUrl = buildOrNormalizeUrl(d.url);
+                 const vcDomain = getVendorCentralDomain(domainSelect.value);
+                 const vcUrl = `https://${vcDomain}/imaging/manage?asins=${asin}`;
+
+                 return [
+                     { url: pdpUrl, type: 'pdp', id: asin, comparisonData: d.comparisonData },
+                     { url: vcUrl, type: 'vc', id: asin }
+                 ];
+             } else {
+                 return d; // Fallback to raw object or standard scrape
+             }
+        }).flat().filter(Boolean);
+
+    } else if (mode === 'current') {
        if (rawCsvData.length > 0) {
            let validUrls = rawCsvData.map(line => buildOrNormalizeUrl(line)).filter(u => u !== null);
            urlsToProcess = validUrls;
@@ -1079,19 +1338,39 @@ document.addEventListener('DOMContentLoaded', () => {
        if(!IS_LOGGED_IN && urlsToProcess.length > GUEST_LIMIT) urlsToProcess = urlsToProcess.slice(0, GUEST_LIMIT);
        if(urlsToProcess.length === 0) { statusDiv.textContent = "No Amazon tabs found."; return; }
     } else {
+       // Bulk / Watchlist
        if (!IS_LOGGED_IN) { alert("Login required."); return; }
        if (rawCsvData.length === 0) { alert("No Data."); return; }
+
        urlsToProcess = rawCsvData.map(item => {
            if (typeof item === 'string') return buildOrNormalizeUrl(item);
            else {
+               // Handle Structured Data (Type 2 from Bulk Tab)
+               if (item.auditType === 'type2' && MEGA_MODE === 'auditor') {
+                   const url = buildOrNormalizeUrl(item.url);
+                   const asin = url ? url.match(/([A-Z0-9]{10})/)?.[1] : null;
+                   if (asin) {
+                       const vcDomain = getVendorCentralDomain(domainSelect.value);
+                       const vcUrl = `https://${vcDomain}/imaging/manage?asins=${asin}`;
+                       return [
+                           { url: url, type: 'pdp', id: asin, comparisonData: item.comparisonData },
+                           { url: vcUrl, type: 'vc', id: asin }
+                       ];
+                   }
+                   return { ...item, url };
+               }
+
                const normUrl = buildOrNormalizeUrl(item.url);
                return normUrl ? { ...item, url: normUrl } : null;
            }
-       }).filter(u => u !== null);
+       }).flat().filter(u => u !== null);
        if(urlsToProcess.length === 0) { alert("No valid URLs."); return; }
     }
 
-    const settings = { disableImages: (mode === 'bulk' && disableImagesInput.checked) };
+    const settings = {
+        disableImages: (mode !== 'current' && disableImagesInput.checked),
+        scrapeAOD: (mode === 'current' ? scrapeAODCurrent.checked : (mode === 'bulk' ? scrapeAODBulk.checked : false))
+    };
     chrome.runtime.sendMessage({ action: 'START_SCAN', payload: { urls: urlsToProcess, mode, settings } });
   });
 
@@ -1130,7 +1409,8 @@ document.addEventListener('DOMContentLoaded', () => {
           
           if(currentSection) currentSection.style.display = 'none';
           if(bulkSection) bulkSection.style.display = 'none';
-          if(watchlistSection) watchlistSection.style.display = 'none'; 
+          if(watchlistSection) watchlistSection.style.display = 'none';
+          if(vendorSection) vendorSection.style.display = 'none';
       } else {
           scanBtn.style.display = 'block';
           stopBtn.style.display = 'none';
@@ -1167,6 +1447,7 @@ document.addEventListener('DOMContentLoaded', () => {
               if (mode === 'current') { if(currentSection) currentSection.style.display = 'block'; }
               else if (mode === 'bulk') { if(bulkSection) bulkSection.style.display = 'block'; }
               else if (mode === 'watchlist') { if(watchlistSection) watchlistSection.style.display = 'block'; }
+              else if (mode === 'vendor') { if(vendorSection) vendorSection.style.display = 'block'; }
           }
       }
       
@@ -1207,45 +1488,64 @@ document.addEventListener('DOMContentLoaded', () => {
       dashboardView.style.display = 'grid';
   }
 
-  // --- Export Helpers ---
+  // --- Export Helpers & Strict Column Definitions ---
+
+  // 1. Scraping Mode Columns (Strict)
+  const SCRAPING_COLUMNS = [
+      'marketplace', 'deliveryLocation', 'queryASIN', 'mediaAsin', 'url', 'parentAsin', 'brand', 'metaTitle',
+      'bullets', 'bulletsCount', 'description', 'displayPrice', 'soldBy',
+      'freeDeliveryDate', 'primeOrFastestDeliveryDate', 'paidDeliveryDate',
+      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails'
+      // Note: 'full list of sellers' is handled via secondary tab 'offers' if AOD data exists
+  ];
+
+  // 2. Audit Mode Columns (Superset including booleans and counts)
+  const AUDIT_COLUMNS = [
+      ...SCRAPING_COLUMNS,
+      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
+      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
+      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
+  ];
+
   const MASTER_COLUMNS = [
     { key: 'status', header: 'status' },
-    { key: 'marketplace', header: 'marketPlace' },
-    { key: 'deliveryLocation', header: 'deliveryLocation' },
-    { key: 'url', header: 'pageURL' },
-    { key: 'queryASIN', header: 'queryASIN' },
-    { key: 'mediaAsin', header: 'pageASIN' },
-    { key: 'parentAsin', header: 'parentAsin' },
-    { key: 'lqs', header: 'lqs' },
-    { key: 'displayPrice', header: 'displayPrice' },
-    { key: 'stockStatus', header: 'stockStatus' },
-    { key: 'freeDeliveryDate', header: 'freeDeliveryDate' },
-    { key: 'paidDeliveryDate', header: 'paidDeliveryDate' },
-    { key: 'primeOrFastestDeliveryDate', header: 'primeOrFastestDeliveryDate' },
-    { key: 'soldBy', header: 'soldBy' },
+    { key: 'marketplace', header: 'marketplace' },
+    { key: 'deliveryLocation', header: 'delivery_location' },
+    { key: 'url', header: 'page_url' },
+    { key: 'queryASIN', header: 'query_asin' },
+    { key: 'mediaAsin', header: 'page_asin' },
+    { key: 'parentAsin', header: 'parent_asin' },
+    { key: 'brand', header: 'brand' },
+    { key: 'metaTitle', header: 'item_name' },
+    { key: 'bullets', header: 'bullet_point' },
+    { key: 'bulletsCount', header: 'bullet_point_count' },
+    { key: 'description', header: 'product_description' },
+    { key: 'displayPrice', header: 'list_price' },
+    { key: 'soldBy', header: 'sold_by' },
+    { key: 'freeDeliveryDate', header: 'free_delivery_date' },
+    { key: 'primeOrFastestDeliveryDate', header: 'prime_fastest_delivery_date' },
+    { key: 'paidDeliveryDate', header: 'paid_delivery_date' },
     { key: 'rating', header: 'rating' },
     { key: 'reviews', header: 'reviews' },
-    { key: 'bsr', header: 'bestSellersRank' },
-    { key: 'brand', header: 'brand' },
-    { key: 'metaTitle', header: 'metaTitle' },
-    { key: 'hasBullets', header: 'hasBullets' },
-    { key: 'bulletsCount', header: 'bulletsCount' },
-    { key: 'bullets', header: 'bullets' },
-    { key: 'hasDescription', header: 'hasDescription' },
-    { key: 'description', header: 'description' },
-    { key: 'variationExists', header: 'variationExists' },
-    { key: 'variationTheme', header: 'variationTheme' },
-    { key: 'variationCount', header: 'variationCount' },
-    { key: 'variationFamily', header: 'variationFamily' },
-    { key: 'hasBrandStory', header: 'hasBrandStory' },
-    { key: 'brandStoryImgs', header: 'brandStoryImgs' },
-    { key: 'hasAplus', header: 'hasAplus' },
-    { key: 'aPlusImgs', header: 'aPlusImgs' },
-    { key: 'hasVideo', header: 'hasVideo' },
-    { key: 'videoCount', header: 'videoCount' },
-    { key: 'videos', header: 'videos' },
-    { key: 'imgVariantCount', header: 'imgVariantCount' },
-    { key: 'imgVariantDetails', header: 'imgVariantDetails' }
+    { key: 'bsr', header: 'best_sellers_rank' },
+    { key: 'imgVariantCount', header: 'product_image_count' },
+    { key: 'imgVariantDetails', header: 'product_image_details' },
+    // Audit Specific Below
+    { key: 'lqs', header: 'listing_quality_score' },
+    { key: 'stockStatus', header: 'stock_status' },
+    { key: 'hasBullets', header: 'has_bullet_point' },
+    { key: 'hasDescription', header: 'has_product_description' },
+    { key: 'hasVariation', header: 'has_variation' }, // mapped from variationExists
+    { key: 'variationTheme', header: 'variation_theme' },
+    { key: 'variationCount', header: 'variation_family_count' },
+    { key: 'variationFamily', header: 'variation_family' },
+    { key: 'hasBrandStory', header: 'has_brand_story' },
+    { key: 'brandStoryImgs', header: 'brand_story_images' },
+    { key: 'hasAplus', header: 'has_aplus_modules' },
+    { key: 'aPlusImgs', header: 'aplus_image_modules' },
+    { key: 'hasVideo', header: 'has_video' },
+    { key: 'videoCount', header: 'videos_count' },
+    { key: 'videos', header: 'videos' }
   ];
 
   const forcedFields = ['marketplace', 'deliveryLocation', 'mediaAsin', 'url', 'queryASIN'];
@@ -1292,12 +1592,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const getExportData = async () => {
     const data = await chrome.storage.local.get('auditState');
-    const results = data.auditState ? data.auditState.results : [];
+    let results = data.auditState ? data.auditState.results : [];
     if (!results || results.length === 0) return null;
 
+    // --- Type 2 Audit Merge Logic ---
+    // If multiple results exist for same ID (one PDP, one VC), merge them.
+    if (MEGA_MODE === 'auditor') {
+        const mergedMap = new Map();
+        results.forEach(res => {
+            const id = res.id || res.queryASIN || res.attributes?.mediaAsin || res.url; // Use ID from dual-task if available
+            if (!mergedMap.has(id)) mergedMap.set(id, {});
+
+            const existing = mergedMap.get(id);
+
+            if (res.isVC) {
+                existing.vcData = res; // Store VC result
+            } else {
+                existing.pdpData = res; // Store PDP result
+            }
+            // Preserve comparison inputs if attached to either
+            if (res.comparisonData) existing.comparisonData = res.comparisonData;
+        });
+
+        // Flatten back to array, using PDP as base if exists, else VC
+        results = Array.from(mergedMap.values()).map(merged => {
+            const base = merged.pdpData || merged.vcData;
+            if (!base) return null;
+            // Attach merged parts
+            base.vcData = merged.vcData;
+            base.comparisonData = merged.comparisonData;
+            return base;
+        }).filter(Boolean);
+    }
+
     const checkedValues = Array.from(document.querySelectorAll('.attr-checkbox:checked')).map(cb => cb.value);
-    const selectedFields = [...new Set([...forcedFields, ...checkedValues])];
+    let selectedFields = [...new Set([...forcedFields, ...checkedValues])];
     
+    // Filter based on Mega Mode Strictness
+    const ALLOWED_SET = (MEGA_MODE === 'scraper') ? SCRAPING_COLUMNS : AUDIT_COLUMNS;
+    selectedFields = selectedFields.filter(f => ALLOWED_SET.includes(f) || forcedFields.includes(f));
+
     // Sort fields based on MASTER_COLUMNS sequence
     const finalFields = [];
     MASTER_COLUMNS.forEach(col => {
@@ -1317,10 +1651,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Construct Header list with correct order
     const finalHeaders = finalFields.map(f => keyToHeader[f] || f);
     
-    // Add expected headers if data exists
-    const hasExpectedData = results.some(r => r.expected);
-    if (hasExpectedData) {
-        finalHeaders.push("Expected Title", "Title Match", "Expected Bullets", "Bullets Match", "Initial Price", "Price Change");
+    // Add Comparison Headers if Audit Mode
+    if (MEGA_MODE === 'auditor') {
+        const auditHeaders = [
+            "User: Title", "Match: Title",
+            "User: Bullets", "Match: Bullets",
+            "User: Description", "Match: Description",
+            "User: Images", "Match: User Images",
+            "VC: Images", "Match: VC Images",
+            "User: Videos", "Match: Videos",
+            "User: A+", "Match: A+",
+            "User: Brand Story", "Match: Brand Story"
+        ];
+        finalHeaders.push(...auditHeaders);
+    } else {
+        // Legacy Watchlist Comparison (if scraping mode but watchlist used)
+        const hasExpectedData = results.some(r => r.expected);
+        if (hasExpectedData) {
+            finalHeaders.push("Expected Title", "Title Match", "Expected Bullets", "Bullets Match", "Initial Price", "Price Change");
+        }
     }
 
     let csvHeader = finalHeaders.join(",") + "\n";
@@ -1343,6 +1692,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectedFields.includes('aPlusImgs')) tabMap.aPlusImgs = createTab('aPlusImgs', ['pageASIN']);
     if (selectedFields.includes('videos')) tabMap.videos = createTab('videos', ['pageASIN']);
     if (selectedFields.includes('imgVariantDetails')) tabMap.imgVariantDetails = createTab('imgVariantDetails', ['pageASIN', 'variant', 'hiRes', 'large']);
+
+    // Always create Offers tab if data exists, or conditionally? Let's check results first.
+    // If ANY result has aodData, we create the Offers tab.
+    const hasAOD = results.some(r => r.attributes && r.attributes.aodData && r.attributes.aodData.length > 0);
+    if (hasAOD) tabMap.offers = createTab('offers', ['pageASIN', 'seller', 'price', 'ships_from', 'rating', 'reviews']);
 
     const rows = results.map(tabData => {
         let rowStatus = "SUCCESS";
@@ -1458,35 +1812,91 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             }
+            if (tabMap.offers && tabData.attributes.aodData) {
+                tabData.attributes.aodData.forEach(offer => {
+                    tabMap.offers.rows.push([
+                        pageASIN,
+                        offer.soldBy || 'unknown',
+                        offer.price || 'none',
+                        offer.shipsFrom || 'none',
+                        offer.rating || 'none',
+                        offer.reviews || 'none'
+                    ]);
+                });
+            }
         }
 
-        if (hasExpectedData) {
-            if (tabData.expected && !tabData.error) {
-                const expTitle = tabData.expected.title || "none";
-                const actTitle = tabData.attributes.metaTitle || "none";
-                const titleMatch = (expTitle !== "none" && expTitle === actTitle) ? "TRUE" : (expTitle === "none" ? "-" : "FALSE");
-                row['Expected Title'] = expTitle;
-                row['Title Match'] = titleMatch;
+        // --- Audit Mode Comparisons (Type 2) ---
+        if (MEGA_MODE === 'auditor') {
+            const comp = tabData.comparisonData || {};
 
-                const expBullets = tabData.expected.bullets || "none";
-                const actBullets = tabData.attributes.bullets || "none";
-                const bulletMatch = (expBullets !== "none" && expBullets === actBullets) ? "TRUE" : (expBullets === "none" ? "-" : "FALSE");
-                row['Expected Bullets'] = expBullets;
-                row['Bullets Match'] = bulletMatch;
+            // 1. Title
+            const userTitle = comp.item_name || "none";
+            row['User: Title'] = userTitle;
+            row['Match: Title'] = (userTitle !== "none" && tabData.attributes.metaTitle === userTitle) ? "TRUE" : "FALSE";
 
-                const initPrice = tabData.expected.price || "none";
-                const currPrice = tabData.attributes.displayPrice || "none";
-                const priceChange = (initPrice !== "none" && initPrice !== currPrice) ? "CHANGED" : "-";
-                row['Initial Price'] = initPrice;
-                row['Price Change'] = priceChange;
-            } else {
-                row['Expected Title'] = "";
-                row['Title Match'] = "";
-                row['Expected Bullets'] = "";
-                row['Bullets Match'] = "";
-                row['Initial Price'] = "";
-                row['Price Change'] = "";
-            }
+            // 2. Bullets
+            const userBullets = comp.bullet_point || "none";
+            row['User: Bullets'] = userBullets;
+            // Simple logic: check if user text is contained in scraped bullets
+            row['Match: Bullets'] = (userBullets !== "none" && tabData.attributes.bullets.includes(userBullets)) ? "TRUE" : "FALSE";
+
+            // 3. Description
+            const userDesc = comp.product_description || "none";
+            row['User: Description'] = userDesc;
+            row['Match: Description'] = (userDesc !== "none" && tabData.attributes.description.includes(userDesc)) ? "TRUE" : "FALSE";
+
+            // 4. Images (User provided)
+            const userImgs = comp.product_image_details || [];
+            row['User: Images'] = Array.isArray(userImgs) ? JSON.stringify(userImgs) : userImgs;
+            // Complex match? For now just existence
+            row['Match: User Images'] = (Array.isArray(userImgs) && userImgs.length > 0 && tabData.data.length >= userImgs.length) ? "TRUE" : "FALSE";
+
+            // 5. Images (VC provided)
+            const vcImgs = tabData.vcData ? tabData.vcData.images : [];
+            row['VC: Images'] = vcImgs ? JSON.stringify(vcImgs) : "none";
+            // Check if VC images exist in PDP data (by URL or count)
+            // Ideally we check if every VC image URL is present in PDP data.
+            // But VC URLs might differ from PDP display URLs (resizing).
+            // Fallback: Check Count
+            row['Match: VC Images'] = (vcImgs && vcImgs.length > 0 && tabData.data.length >= vcImgs.length) ? "TRUE" : "FALSE";
+
+            // 6. Videos
+            const userVids = comp.videos || [];
+            row['User: Videos'] = Array.isArray(userVids) ? JSON.stringify(userVids) : userVids;
+            row['Match: Videos'] = (Array.isArray(userVids) && userVids.length > 0 && tabData.attributes.videoCount >= userVids.length) ? "TRUE" : "FALSE";
+
+            // 7. A+
+            const userAplus = comp.aplus_image_modules || [];
+            row['User: A+'] = Array.isArray(userAplus) ? JSON.stringify(userAplus) : userAplus;
+            row['Match: A+'] = (Array.isArray(userAplus) && userAplus.length > 0 && tabData.attributes.aPlusImgs.length >= userAplus.length) ? "TRUE" : "FALSE";
+
+            // 8. Brand Story
+            const userBs = comp.brand_story_images || [];
+            row['User: Brand Story'] = Array.isArray(userBs) ? JSON.stringify(userBs) : userBs;
+            row['Match: Brand Story'] = (Array.isArray(userBs) && userBs.length > 0 && tabData.attributes.brandStoryImgs.length >= userBs.length) ? "TRUE" : "FALSE";
+
+        } else if (tabData.expected && !tabData.error) {
+            // Legacy Watchlist Comparison
+            const expTitle = tabData.expected.title || "none";
+            const actTitle = tabData.attributes.metaTitle || "none";
+            const titleMatch = (expTitle !== "none" && expTitle === actTitle) ? "TRUE" : (expTitle === "none" ? "-" : "FALSE");
+            row['Expected Title'] = expTitle;
+            row['Title Match'] = titleMatch;
+
+            const expBullets = tabData.expected.bullets || "none";
+            const actBullets = tabData.attributes.bullets || "none";
+            const bulletMatch = (expBullets !== "none" && expBullets === actBullets) ? "TRUE" : (expBullets === "none" ? "-" : "FALSE");
+            row['Expected Bullets'] = expBullets;
+            row['Bullets Match'] = bulletMatch;
+
+            const initPrice = tabData.expected.price || "none";
+            const currPrice = tabData.attributes.displayPrice || "none";
+            const priceChange = (initPrice !== "none" && initPrice !== currPrice) ? "CHANGED" : "-";
+            row['Initial Price'] = initPrice;
+            row['Price Change'] = priceChange;
+        } else {
+            // Fill empty if needed, or leave undefined
         }
         
         // Generate CSV Line from row object using header order
@@ -1776,78 +2186,100 @@ document.addEventListener('DOMContentLoaded', () => {
     updateGroupCheckboxes();
   });
   
-  copyBtn.addEventListener('click', async () => {
-      const data = await chrome.storage.local.get('auditState');
-      const results = data.auditState ? data.auditState.results : [];
-      navigator.clipboard.writeText(JSON.stringify(results, null, 2));
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => copyBtn.textContent = 'Copy JSON Data', 1500);
-  });
-});
   // --- Feature 2: Attribute Templates ---
-  const selectAttributesForTemplate = (watchlistId) => {
-      // Show existing audit config panel but in "Template Mode"
-      const modal = document.createElement('dialog');
-      modal.style.padding = '0';
-      modal.style.border = 'none';
-      modal.style.borderRadius = '8px';
-      modal.style.width = '400px';
-      modal.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
 
-      const header = document.createElement('div');
-      header.className = 'modal-header';
-      header.innerHTML = '<span>Select Attributes to Track</span>';
+  const templateModal = document.getElementById('templateModal');
+  const closeTemplateModalBtn = document.getElementById('closeTemplateModalBtn');
+  const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+  const tplSelectAll = document.getElementById('tplSelectAll');
 
-      const body = document.createElement('div');
-      body.className = 'modal-body';
-      body.style.padding = '12px';
-      body.style.maxHeight = '300px';
-      body.style.overflowY = 'auto';
+  closeTemplateModalBtn.addEventListener('click', () => templateModal.close());
 
-      // Clone existing grid but reset inputs
-      const grid = document.getElementById('attributesGrid').cloneNode(true);
-      grid.querySelectorAll('input').forEach(input => {
-          input.disabled = false;
-          input.checked = false; // Default off, let user pick
+  // Helper to handle template modal state
+  function updateTplGroupCheckboxes() {
+      ['core', 'advanced', 'content'].forEach(group => {
+          const groupCb = document.querySelector(`.tpl-group-select[data-group="${group}"]`);
+          const items = Array.from(document.querySelectorAll(`.tpl-attr-checkbox.tpl-group-${group}:not(:disabled)`));
+          if (items.length > 0 && groupCb) {
+              groupCb.checked = items.every(cb => cb.checked);
+          }
       });
-      // Default core attributes
-      ['mediaAsin', 'metaTitle', 'displayPrice'].forEach(val => {
-          const cb = grid.querySelector(`input[value="${val}"]`);
-          if(cb) cb.checked = true;
-      });
+      const all = Array.from(document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)'));
+      tplSelectAll.checked = all.every(cb => cb.checked);
+  }
 
-      body.appendChild(grid);
+  // Bind events to Template Modal Checkboxes
+  tplSelectAll.addEventListener('change', (e) => {
+      document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
+      updateTplGroupCheckboxes();
+  });
 
-      const footer = document.createElement('div');
-      footer.className = 'modal-footer';
-      const saveBtn = document.createElement('button');
-      saveBtn.textContent = 'Save Template';
-      saveBtn.className = 'auth-btn';
-      saveBtn.style.background = 'var(--primary)';
-      saveBtn.style.color = 'white';
-
-      saveBtn.onclick = () => {
-          const selected = Array.from(grid.querySelectorAll('input.attr-checkbox:checked')).map(cb => cb.value);
-          const key = getWatchlistContainerKey();
-          chrome.storage.local.get([key], (data) => {
-              const container = data[key];
-              if (container && container[watchlistId]) {
-                  container[watchlistId].template = selected;
-                  chrome.storage.local.set({ [key]: container }, () => {
-                      modal.close();
-                      alert("Template saved! Future imports/snapshots will highlight these attributes.");
-                  });
-              }
+  document.querySelectorAll('.tpl-group-select').forEach(groupCb => {
+      groupCb.addEventListener('change', (e) => {
+          const group = e.target.dataset.group;
+          const isChecked = e.target.checked;
+          document.querySelectorAll(`.tpl-attr-checkbox.tpl-group-${group}`).forEach(cb => {
+              if (!cb.disabled) cb.checked = isChecked;
           });
-      };
+          updateTplGroupCheckboxes();
+      });
+  });
 
-      footer.appendChild(saveBtn);
-      modal.appendChild(header);
-      modal.appendChild(body);
-      modal.appendChild(footer);
-      document.body.appendChild(modal);
-      modal.showModal();
-  };
+  document.querySelectorAll('.tpl-attr-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+          updateTplGroupCheckboxes();
+      });
+  });
+
+  function selectAttributesForTemplate(watchlistId) {
+      // 1. Reset all to uncheck first (but keep mandatory/disabled ones)
+      document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)').forEach(cb => cb.checked = false);
+
+      // 2. Load existing template or default
+      const key = getWatchlistContainerKey();
+      chrome.storage.local.get([key], (data) => {
+          const container = data[key];
+          let selected = [];
+
+          if (container && container[watchlistId] && container[watchlistId].template && container[watchlistId].template.length > 0) {
+              selected = container[watchlistId].template;
+          } else {
+              // Default
+               selected = ['mediaAsin', 'metaTitle', 'displayPrice'];
+          }
+
+          // Apply selection
+          selected.forEach(val => {
+              const cb = document.querySelector(`.tpl-attr-checkbox[value="${val}"]`);
+              if (cb && !cb.disabled) cb.checked = true;
+          });
+
+          updateTplGroupCheckboxes();
+
+          // Store ID for save button context
+          saveTemplateBtn.dataset.watchlistId = watchlistId;
+
+          templateModal.showModal();
+      });
+  }
+
+  saveTemplateBtn.addEventListener('click', () => {
+      const watchlistId = saveTemplateBtn.dataset.watchlistId;
+      if (!watchlistId) return;
+
+      const selected = Array.from(document.querySelectorAll('.tpl-attr-checkbox:checked')).map(cb => cb.value);
+      const key = getWatchlistContainerKey();
+
+      chrome.storage.local.get([key], (data) => {
+          const container = data[key];
+          if (container && container[watchlistId]) {
+              container[watchlistId].template = selected;
+              chrome.storage.local.set({ [key]: container }, () => {
+                  templateModal.close();
+              });
+          }
+      });
+  });
 
   // Add "Edit Template" Button next to controls
   const editTemplateBtn = document.createElement('button');
@@ -1857,7 +2289,7 @@ document.addEventListener('DOMContentLoaded', () => {
   editTemplateBtn.style.width = 'auto';
   editTemplateBtn.style.flex = 'none';
   editTemplateBtn.onclick = () => selectAttributesForTemplate(currentWatchlistId);
-  document.getElementById('deleteWatchlistBtn').before(editTemplateBtn);
+  deleteWatchlistBtn.before(editTemplateBtn);
 
   // New Feature: Download Template CSV
   const downloadTemplateBtn = document.createElement('button');
@@ -1904,6 +2336,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Insert download button in Watchlist section
   document.getElementById('watchlistSection').appendChild(downloadTemplateBtn);
+
+  // Template Download for Audit Type 2
+  downloadAuditTemplateBtn.addEventListener('click', () => {
+      const headers = [
+          'ASIN',
+          'item_name',
+          'bullet_point',
+          'product_description',
+          'videos',
+          'aplus_image_modules',
+          'brand_story_images'
+      ];
+      const csvContent = headers.join(",") + "\n" + "B00EXAMPLE,My Title,Bullet 1|Bullet 2,Desc,[link1,link2],[link1],[link1]";
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "Audit_Comparison_Template.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  });
   // --- Feature: Visual Tracker (Chart.js) ---
   const chartModal = document.getElementById('chartModal');
   const closeChartBtn = document.getElementById('closeChartBtn');
@@ -1960,8 +2414,6 @@ document.addEventListener('DOMContentLoaded', () => {
       chartModal.showModal();
   };
   // --- Feature: Cloud Sync (Firestore) ---
-  import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
-  import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
 
   const syncToFirestore = async (container) => {
       if (!IS_LOGGED_IN || !USER_INFO || !USER_INFO.email) return;
@@ -2004,3 +2456,4 @@ document.addEventListener('DOMContentLoaded', () => {
           console.error("Fetch Error", e);
       }
   };
+});

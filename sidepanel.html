@@ -256,10 +256,20 @@
         </div>
     </div>
     
+    <div style="display:flex; justify-content:center; gap:16px; margin-bottom:12px; padding:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="scraper" checked style="accent-color:var(--primary);"> Scraper Mode
+        </label>
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="auditor" style="accent-color:var(--primary);"> Auditor Mode
+        </label>
+    </div>
+
     <div class="mode-tabs">
       <div class="mode-tab active" id="tabCurrent">Current Window</div>
-      <div class="mode-tab disabled" id="tabBulk">Bulk Import <span class="lock-icon">🔒</span></div>
+      <div class="mode-tab disabled" id="tabBulk">Bulk / CSV <span class="lock-icon">🔒</span></div>
       <div class="mode-tab" id="tabWatchlist">Watchlist</div>
+      <div class="mode-tab disabled" id="tabVendor" style="display:none;">Vendor (Auth) <span class="lock-icon">🔒</span></div>
     </div>
     
     <div id="currentSection">
@@ -271,12 +281,16 @@
                  📸 Snapshot
             </button>
         </div>
+        <div id="scraperAODWrapper" style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="scrapeAODCurrent" style="accent-color:var(--primary);">
+            <label for="scrapeAODCurrent" style="font-size:12px; color:var(--text-main); font-weight:500;">Also Scrape Offers (AOD)</label>
+        </div>
         <div id="pasteStatus" style="font-size:11px; text-align:center; margin-top:4px; font-weight:600; min-height:16px;"></div>
     </div>
 
     <div id="bulkSection">
-      <div class="bulk-hint">
-          Upload CSV (Headers: URL, Expected Title) or Paste Links
+      <div class="bulk-hint" id="bulkHintText">
+          Upload CSV or Paste Links
       </div>
       <div style="margin-bottom: 12px;">
           <div class="file-input-wrapper" style="margin-bottom: 8px;">
@@ -290,6 +304,9 @@
                  📥 Import Watchlist
               </button>
           </div>
+          <button id="downloadAuditTemplateBtn" style="width:100%; margin-top:8px; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer; display:none;">
+              📥 Download Comparison Template (Audit Type 2)
+          </button>
           <div style="text-align:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
               Pro Limit: 30 (Batched)
           </div>
@@ -316,8 +333,27 @@
                   <input type="checkbox" id="disableImages"> Disable Images (Faster)
               </label>
           </div>
+          <div class="control-row">
+              <label>Scrape AOD</label>
+              <label style="font-weight:400; cursor:pointer;">
+                  <input type="checkbox" id="scrapeAODBulk"> Get All Offers
+              </label>
+          </div>
       </div>
       <div id="fileStatus" style="font-size:11px; color:var(--success); margin-top:8px; font-weight:600;"></div>
+    </div>
+
+    <div id="vendorSection" style="display:none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+        <div class="bulk-hint">
+            Vendor Central Audit (Requires Login)
+        </div>
+        <div style="margin-bottom: 8px; font-size:11px; color:var(--text-muted);">
+            Upload CSV with headers: <strong>ASIN, SKU, VendorCode</strong>
+        </div>
+        <div class="file-input-wrapper" style="margin-bottom: 8px;">
+          <input type="file" id="vendorCsvInput" accept=".csv, .txt">
+        </div>
+        <div id="vendorFileStatus" style="font-size:11px; color:var(--success); margin-top:4px; font-weight:600;"></div>
     </div>
 
     <div id="watchlistSection">
@@ -468,7 +504,6 @@
     <div style="display:flex; flex-direction: column; gap:8px;">
         <div style="display:flex; gap:8px;">
             <button id="previewBtn" class="action-btn" style="flex:1; margin-top:0; background:rgba(37,99,235,0.1); color:var(--primary); border-color:rgba(37,99,235,0.3);">👁️ Preview</button>
-            <button id="copyBtn" class="action-btn" style="flex:1; margin-top:0;">Copy JSON</button>
         </div>
         <div style="display:flex; gap:8px;">
             <button id="downloadBtn" class="action-btn" style="flex:1; margin-top:0;">CSV</button>
@@ -518,6 +553,105 @@
       </div>
       <div class="modal-body" style="height:300px; padding:10px;">
           <canvas id="historyChart"></canvas>
+      </div>
+  </dialog>
+
+  <dialog id="inputModal">
+      <div class="modal-header">
+          <span id="inputModalTitle">Watchlist Name</span>
+          <button id="closeInputModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+          <input type="text" id="watchlistNameInput" placeholder="Enter name..." style="width: 100%; padding: 8px; box-sizing: border-box;">
+      </div>
+      <div class="modal-footer">
+          <button id="saveInputBtn" class="auth-btn" style="background:var(--primary); color:white; width:auto; display:inline-flex;">Save</button>
+      </div>
+  </dialog>
+
+  <dialog id="templateModal">
+      <div class="modal-header">
+          <span>Select Attributes to Track</span>
+          <button id="closeTemplateModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+
+      <div class="options-header" style="border-top:none; background: var(--bg);">
+        <span>Configuration</span>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+            <input type="checkbox" id="tplSelectAll" checked style="margin-right:4px;"> Select All
+        </label>
+      </div>
+
+      <div class="modal-body" style="padding: 0;">
+        <div id="tplAttributesGrid" class="attributes-grid" style="max-height: 400px;">
+             <div class="section-label">
+                <span>Executive Summary</span>
+                <span class="lock-icon">🔒</span>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature" value="lqs" checked disabled> Listing Quality Score</label></div>
+            <div></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="core" checked>
+                    <span>Core Data (Free)</span>
+                </div>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="marketplace" checked disabled> Marketplace</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="queryASIN" checked disabled> Query ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="mediaAsin" checked disabled> Page ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="brand" checked> Brand Name</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="metaTitle" checked> Page Title</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="displayPrice" checked> Price</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="rating" checked> Rating (Stars)</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="reviews" checked> Review Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="url" checked disabled> Page URL</label></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="advanced" checked disabled>
+                    <span>Advanced Data</span>
+                    <span class="lock-icon">🔒</span>
+                </div>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="parentAsin" checked disabled> Parent ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="stockStatus" checked disabled> Stock Status</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="soldBy" checked disabled> Sold By</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="bsr" checked disabled> Best Sellers Rank</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="freeDeliveryDate" checked disabled> Free Delivery</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="paidDeliveryDate" checked disabled> Paid Delivery</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="primeOrFastestDeliveryDate" checked disabled> Prime / Fastest</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-advanced" value="deliveryLocation" checked disabled> Delivery Location</label></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="content" checked disabled>
+                    <span>Content Audit</span>
+                    <span class="lock-icon">🔒</span>
+                </div>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasBullets" checked disabled> Has Bullet Points?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="bulletsCount" checked disabled> Bullet Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="bullets" checked disabled> Bullet Points</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasDescription" checked disabled> Has Description?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="description" checked disabled> Description</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationExists" checked disabled> Has Variations?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationTheme" checked disabled> Variation Theme</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationCount" checked disabled> Variation Quantity</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationFamily" checked disabled> Variation Child ASINs</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasBrandStory" checked disabled> Has Brand Story?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="brandStoryImgs" checked disabled> Brand Story Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasAplus" checked disabled> Has A+ Content?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="aPlusImgs" checked disabled> A+ Content Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasVideo" checked disabled> Has Video?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="videoCount" checked disabled> Video Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="videos" checked disabled> Videos Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="imgVariantCount" checked disabled> Image Link Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="imgVariantDetails" checked disabled> Image Link Details</label></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+          <button id="saveTemplateBtn" class="auth-btn" style="background:var(--primary); color:white; width:auto; display:inline-flex;">Save Template</button>
       </div>
   </dialog>
 
