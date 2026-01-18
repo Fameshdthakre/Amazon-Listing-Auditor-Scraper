@@ -2032,7 +2032,7 @@ document.addEventListener('DOMContentLoaded', () => {
   editTemplateBtn.style.width = 'auto';
   editTemplateBtn.style.flex = 'none';
   editTemplateBtn.onclick = () => selectAttributesForTemplate(currentWatchlistId);
-  document.getElementById('deleteWatchlistBtn').before(editTemplateBtn);
+  deleteWatchlistBtn.before(editTemplateBtn);
 
   // New Feature: Download Template CSV
   const downloadTemplateBtn = document.createElement('button');

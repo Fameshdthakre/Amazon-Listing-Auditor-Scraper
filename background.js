@@ -15,7 +15,7 @@ const INITIAL_STATE = {
   nextActionTime: null 
 };
 
-const CONCURRENCY_LIMIT = 5;
+const CONCURRENCY_LIMIT = 10;
 
 // --- Initialization ---
 
