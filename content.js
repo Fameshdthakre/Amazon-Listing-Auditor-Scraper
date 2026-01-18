@@ -59,9 +59,49 @@
     }
 
     // const pageSource = document.documentElement.outerHTML; // Optimization: Removed global extraction
-    const scripts = document.querySelectorAll('script');
+    // --- 2.5 Event-Driven Page Ready Detection ---
+    // If we are just checking for readiness, return immediately.
+    // The background script might inject this script twice: once to check readiness/trigger, once to extract.
+    // Or we can do it in one go if we wait.
+    // Current architecture: "extractFromTab" calls this script.
+    // We want to notify background when we are ready.
+    // But since this script is injected by executeScript, it runs ONCE.
+    // To support "Smart Ready", we should probably have a separate light script or modify this one
+    // to wait for the element if it's not there, then return.
 
-    // --- 3. Extract Attributes ---
+    // However, the plan says: "Modify content.js to observe DOM... and send PAGE_READY".
+    // AND "Remove fixed createAlarm".
+    // So this script will now be injected *immediately* after tab creation (via a new mechanism or just loop).
+    // Let's implement a wait-for-selector here before extraction.
+
+    const waitForReady = async () => {
+        const maxWait = 10000;
+        const interval = 100;
+        let elapsed = 0;
+        while (elapsed < maxWait) {
+            // Key indicators of a loaded product page
+            if (document.querySelector('#productTitle') ||
+                document.querySelector('#wayfinding-breadcrumbs_container') ||
+                document.querySelector('#dp-container') ||
+                document.title.includes("Page Not Found") ||
+                document.title.includes("Robot Check")) {
+                return true;
+            }
+            await sleep(interval);
+            elapsed += interval;
+        }
+        return false; // Timeout, proceed anyway to scrape partial or error
+    };
+
+    await waitForReady();
+
+    // --- 3. Extract Attributes (Lazy) ---
+    // If we only need core data, we can skip heavy image parsing.
+    // However, the current requirement is just to implement the structure.
+    // Ideally, we'd pass a 'level' param to this script.
+    // For now, we optimize by NOT iterating all scripts if we find data early.
+
+    const scripts = document.querySelectorAll('script');
 
     // 3.0. GOLD MINE STRATEGY
     let goldMine = null;
