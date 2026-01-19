@@ -1,10 +1,12 @@
 // background.js - Robust Alarm-Based Batch Processing
 
+importScripts('db.js');
+
 const INITIAL_STATE = {
   isScanning: false,
   mode: 'current', 
   urlsToProcess: [],
-  // results: [], // Stored separately in 'auditResults'
+  // results: [], // Stored in IndexedDB
   processedCount: 0,
   currentBatchIndex: 0,
   batchTabIds: [],      
@@ -86,53 +88,22 @@ async function startScan(payload) {
   };
 
   // Initialize separated storage
-  await chrome.storage.local.set({ auditState: newState, auditResults: [] });
+  try {
+      await clearResults(); // Clear IndexedDB
+  } catch(e) { console.error("DB Clear Error", e); }
+
+  await chrome.storage.local.set({ auditState: newState }); // Reset State
 
   // DNR Logic: Enable/Disable Rules based on settings
-  // Rule ID 100 is for Images. IDs 1-6 are for ads/trackers (always block if possible or toggled?)
-  // For now, we will enable the ruleset if disableImages is true,
-  // but really we want to block ads ALWAYS during scan for speed, and images ONLY if requested.
-  // However, DNR static rules are all-or-nothing per ruleset unless we use dynamic rules.
-  // The static ruleset contains both. Let's assume we enable the ruleset for efficiency.
-
   if (settings.disableImages) {
       await chrome.declarativeNetRequest.updateEnabledRulesets({
           enableRulesetIds: ["ruleset_1"]
       });
   } else {
-      // If images are allowed, we might still want to block ads.
-      // But since our rules.json mixes them, we might be blocking images too if we enable it.
-      // Strategy: Use updateDynamicRules to toggle the Image rule (ID 100) specifically.
-
-      // 1. Enable base ruleset (Ads/Trackers) - We assume IDs 1-99 are ads
+      // If images are allowed, we disable the ruleset (assuming it blocks ads AND images)
       await chrome.declarativeNetRequest.updateEnabledRulesets({
-          enableRulesetIds: ["ruleset_1"]
+          disableRulesetIds: ["ruleset_1"]
       });
-
-      // 2. Disable Image Rule (ID 100) dynamically if user wants images
-      await chrome.declarativeNetRequest.updateDynamicRules({
-          addRules: [],
-          removeRuleIds: [100] // Ensure no dynamic block
-      });
-
-      // Since static rules take precedence or are combined, disabling a specific static rule
-      // isn't directly possible via API without disabling the whole set.
-      // So, refined strategy:
-      // We will rely on `rules.json` having the image block.
-      // If the user *wants* images, we must DISABLE the ruleset or specific rule.
-      // Actually, standard practice: Separate rulesets or use Dynamic Rules for the toggleable part.
-      // Simpler approach for now:
-      // If disableImages is TRUE -> Enable ruleset_1 (which includes image block).
-      // If disableImages is FALSE -> Disable ruleset_1 (so we get images + ads).
-      // Ideally we split them, but let's stick to the requested logic:
-      // "Resource Stripping" implies aggressive blocking.
-
-      // Let's stick to: Enable ruleset only if disableImages is checked for now to avoid complexity
-      // or unintentional side effects on normal browsing if logic fails.
-      // Wait, the plan says "aggressive blocking of ads".
-      // So we should enable ad blocking always during scan.
-      // We will modify this in a future step if we split the rules file.
-      // For now, let's follow the simple toggle matching the UI.
   }
 
   createAlarm('QUEUE_PROCESS', 100);
@@ -176,7 +147,6 @@ async function clearData() {
     ...currentState,
     isScanning: false,
     urlsToProcess: [],
-    // results: [],
     processedCount: 0,
     queueIndex: 0,
     activeTabs: {},
@@ -184,7 +154,11 @@ async function clearData() {
     nextActionTime: null
   };
 
-  await chrome.storage.local.set({ auditState: clearedState, auditResults: [] });
+  try {
+      await clearResults(); // Clear IndexedDB
+  } catch(e) { console.error("DB Clear Error", e); }
+
+  await chrome.storage.local.set({ auditState: clearedState });
 }
 
 function getAsinFromUrl(url) {
@@ -199,7 +173,6 @@ async function processQueue(state) {
 
     try {
         // 1. Check for Completed Tabs (Extraction)
-        // We check active tabs to see if they've been open long enough to be ready for extraction
         const now = Date.now();
         let activeTabIds = Object.keys(state.activeTabs || {});
 
@@ -229,7 +202,6 @@ async function processQueue(state) {
             if (tabInfo.status === 'extracting') continue;
 
             // Check readiness: Either onUpdated fired (loaded=true) OR timeout (10s) passed
-            // This removes the arbitrary 2s wait for fast pages
             const isReady = tabInfo.loaded || (now - tabInfo.startTime > 10000);
 
             if (tabInfo.status === 'loading' && isReady) {
@@ -240,9 +212,8 @@ async function processQueue(state) {
                 // Extract async (doesn't block the loop)
                 extractSingleTab(state, tabId, tabInfo).then(async (result) => {
                     // Fetch fresh state to avoid race conditions
-                    const freshData = await chrome.storage.local.get(['auditState', 'auditResults']);
+                    const freshData = await chrome.storage.local.get(['auditState']);
                     let freshState = freshData.auditState;
-                    const freshResults = freshData.auditResults || [];
 
                     if(!freshState) return; // Scan stopped or cleared
 
@@ -268,23 +239,27 @@ async function processQueue(state) {
                             return;
                         }
 
-                        freshResults.push(result);
+                        // Save to IndexedDB
+                        try {
+                            await addResult(result);
+                        } catch(e) { console.error("DB Save Error", e); }
+
                         freshState.processedCount++;
                     }
 
-                // Strict Cleanup: Ensure tab is removed from state AND browser
-                if (freshState.activeTabs && freshState.activeTabs[tabId]) {
-                    delete freshState.activeTabs[tabId];
-                }
+                    // Strict Cleanup: Ensure tab is removed from state AND browser
+                    if (freshState.activeTabs && freshState.activeTabs[tabId]) {
+                        delete freshState.activeTabs[tabId];
+                    }
 
-                // Close tab if it exists
+                    // Close tab if it exists
                     try { await chrome.tabs.remove(parseInt(tabId)); } catch(e) {}
 
-                // Atomic State Update: Commit state and results together
-                    await chrome.storage.local.set({ auditState: freshState, auditResults: freshResults });
+                    // Atomic State Update
+                    await chrome.storage.local.set({ auditState: freshState });
 
-                // Trigger next cycle immediately to fill the now-empty slot
-                createAlarm('QUEUE_PROCESS', 50);
+                    // Trigger next cycle immediately to fill the now-empty slot
+                    createAlarm('QUEUE_PROCESS', 50);
                 });
             }
         }

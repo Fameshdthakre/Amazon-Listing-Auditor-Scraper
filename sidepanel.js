@@ -2140,6 +2140,72 @@ document.addEventListener('DOMContentLoaded', () => {
       }
   }
 
+  // --- NEW: Share / Sync to Cloud Logic ---
+  const shareBtn = document.getElementById('shareBtn');
+  const shareResult = document.getElementById('shareResult');
+  const shareLinkInput = document.getElementById('shareLinkInput');
+  const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
+
+  shareBtn.addEventListener('click', async () => {
+      if (!IS_LOGGED_IN) {
+          alert("Please login to share results.");
+          return;
+      }
+
+      statusDiv.textContent = "Syncing to Cloud...";
+      shareBtn.disabled = true;
+
+      try {
+          const results = await window.getAllResults();
+          if (!results || results.length === 0) {
+              alert("No results to share.");
+              statusDiv.textContent = "No data.";
+              shareBtn.disabled = false;
+              return;
+          }
+
+          // Prepare clean payload for Firestore (Shared Audit)
+          const payload = {
+              createdAt: new Date().toISOString(),
+              createdBy: USER_INFO.email,
+              results: results.map(r => {
+                   return {
+                       url: r.url || null,
+                       id: r.id || r.queryASIN || null,
+                       attributes: r.attributes || {},
+                       comparisonData: r.comparisonData || {},
+                       vcData: r.vcData || {},
+                       error: r.error || null
+                   };
+              })
+          };
+
+          const docRef = await addDoc(collection(db, "shared_audits"), payload);
+          const link = `https://listing-auditor-viewer.web.app/?id=${docRef.id}`;
+
+          shareLinkInput.value = link;
+          shareResult.style.display = 'block';
+          statusDiv.textContent = "Sync Complete!";
+
+      } catch (e) {
+          console.error("Share Error:", e);
+          alert("Failed to share: " + e.message);
+          statusDiv.textContent = "Share failed.";
+      } finally {
+          shareBtn.disabled = false;
+      }
+  });
+
+  copyShareLinkBtn.addEventListener('click', () => {
+      shareLinkInput.select();
+      document.execCommand('copy');
+      navigator.clipboard.writeText(shareLinkInput.value).then(() => {
+          const originalText = copyShareLinkBtn.textContent;
+          copyShareLinkBtn.textContent = "✅";
+          setTimeout(() => copyShareLinkBtn.textContent = originalText, 1500);
+      });
+  });
+
   selectAllCheckbox.addEventListener('change', (e) => {
     document.querySelectorAll('.attr-checkbox:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
     saveCheckboxState();
