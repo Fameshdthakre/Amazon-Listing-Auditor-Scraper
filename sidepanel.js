@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDiv = document.getElementById('status');
   const progressCountDiv = document.getElementById('progressCount'); 
   const selectAllCheckbox = document.getElementById('selectAll');
+  const auditSelectAll = document.getElementById('auditSelectAll');
   const downloadErrorsBtn = document.getElementById('downloadErrorsBtn');
   
   // Tabs & Sections
@@ -671,6 +672,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   });
 
+  if (auditSelectAll) {
+      auditSelectAll.addEventListener('change', (e) => {
+          document.querySelectorAll('.audit-checkbox').forEach(cb => cb.checked = e.target.checked);
+      });
+  }
+
   const lqsCheckbox = document.querySelector('input[value="lqs"]');
   if (lqsCheckbox) {
       lqsCheckbox.addEventListener('change', (e) => {
@@ -923,34 +930,44 @@ document.addEventListener('DOMContentLoaded', () => {
           if (r.checked) MEGA_MODE = r.value;
       });
 
+      // UI Elements for Config
+      const scrapingConfig = document.getElementById('scrapingConfig');
+      const auditConfig = document.getElementById('auditConfig');
+
       // Hide Watchlist Everywhere for now
-      tabWatchlist.style.display = 'none';
+      if (tabWatchlist) tabWatchlist.style.display = 'none';
 
       if (MEGA_MODE === 'scraper') {
-          // Tabs: Show Current, Bulk, Watchlist. Hide Auditor
+          // Tabs: Show Current, Bulk. Hide Auditor
           tabCurrent.style.display = 'flex';
           tabBulk.style.display = 'flex';
-          tabWatchlist.style.display = 'flex';
           tabAuditor.style.display = 'none';
+
+          // Config Visibility
+          if(scrapingConfig) scrapingConfig.style.display = 'block';
+          if(auditConfig) auditConfig.style.display = 'none';
 
           // Bulk: Hints
           bulkHintText.textContent = "Upload CSV (Headers: URL) or Paste Links";
 
           // Force valid tab
           if (mode === 'auditor') tabCurrent.click();
-          else if (mode === 'bulk' || mode === 'watchlist' || mode === 'current') {
-              // Stay on current
+          else if (mode === 'bulk' || mode === 'current') {
+              // Stay on current or bulk
           } else {
               tabCurrent.click();
           }
 
       } else {
           // Auditor Mode
-          // Tabs: Hide Current, Bulk, Watchlist. Show Auditor
+          // Tabs: Hide Current, Bulk. Show Auditor
           tabCurrent.style.display = 'none';
           tabBulk.style.display = 'none';
-          tabWatchlist.style.display = 'none';
           tabAuditor.style.display = 'flex';
+
+          // Config Visibility
+          if(scrapingConfig) scrapingConfig.style.display = 'none';
+          if(auditConfig) auditConfig.style.display = 'block';
 
           // Force valid tab
           if (mode !== 'auditor') tabAuditor.click();
@@ -1337,16 +1354,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Use rawCsvData which should be populated by the auditor input parser
         urlsToProcess = rawCsvData.map(d => {
-             if (d.auditType === 'type2') { // Legacy check or new Logic
-                 // For now, assume single URL unless dual logic is requested later
+             if (d.auditType === 'type2') {
                  return d;
              }
-             // For the new Auditor Mode, we treat d as an object with 'url' and comparisonData
              return d;
         }).flat().filter(Boolean);
 
-        // Note: The logic for parsing XLSX will be handled in the next step.
-        // For now, we assume handleFileSelect populates rawCsvData correctly.
+        // --- Auto-Enable Scraping Fields based on Audit Selection ---
+        // Get selected audit types
+        const selectedAudits = Array.from(document.querySelectorAll('.audit-checkbox:checked')).map(cb => cb.value);
+
+        // Map NEW Audit Checkboxes to Scraping Fields
+        const auditMap = {
+            'auditContent': ['metaTitle', 'bullets', 'bulletsCount', 'hasBullets', 'description', 'hasDescription'],
+            'auditGrowth': ['rating', 'reviews', 'bsr'],
+            'auditImage': ['imgVariantCount', 'imgVariantDetails'],
+            'auditVideo': ['videoCount', 'hasVideo', 'videos'],
+            'auditBrandStory': ['hasBrandStory', 'brandStoryImgs'],
+            'auditAplus': ['hasAplus', 'aPlusImgs'],
+            'auditComparison': ['comparisonAsins'],
+            'auditVariation': ['variationExists', 'variationCount', 'variationTheme', 'variationFamily'],
+            'auditBuyBox': ['displayPrice', 'soldBy'],
+            'auditDelivery': ['deliveryLocation', 'primeOrFastestDeliveryDate', 'freeDeliveryDate', 'paidDeliveryDate']
+        };
+
+        // Ensure required fields are checked
+
+        // We modify the DOM checkboxes so `getExportData` and logic picks them up
+        Object.keys(auditMap).forEach(auditKey => {
+            if (selectedAudits.includes(auditKey)) {
+                auditMap[auditKey].forEach(field => {
+                    const cb = document.querySelector(`.attr-checkbox[value="${field}"]`);
+                    if (cb) {
+                        cb.checked = true;
+                        cb.disabled = false; // Ensure enabled
+                    }
+                });
+            }
+        });
+        // Save state so it persists
+        saveCheckboxState();
 
     } else if (mode === 'current') {
        if (rawCsvData.length > 0) {
@@ -2205,305 +2252,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveCheckboxState();
     updateGroupCheckboxes();
   });
-  
-  // --- Feature 2: Attribute Templates ---
-
-  const templateModal = document.getElementById('templateModal');
-  const closeTemplateModalBtn = document.getElementById('closeTemplateModalBtn');
-  const saveTemplateBtn = document.getElementById('saveTemplateBtn');
-  const tplSelectAll = document.getElementById('tplSelectAll');
-
-  closeTemplateModalBtn.addEventListener('click', () => templateModal.close());
-
-  // Helper to handle template modal state
-  function updateTplGroupCheckboxes() {
-      ['core', 'advanced', 'content'].forEach(group => {
-          const groupCb = document.querySelector(`.tpl-group-select[data-group="${group}"]`);
-          const items = Array.from(document.querySelectorAll(`.tpl-attr-checkbox.tpl-group-${group}:not(:disabled)`));
-          if (items.length > 0 && groupCb) {
-              groupCb.checked = items.every(cb => cb.checked);
-          }
-      });
-      const all = Array.from(document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)'));
-      tplSelectAll.checked = all.every(cb => cb.checked);
-  }
-
-  // Bind events to Template Modal Checkboxes
-  tplSelectAll.addEventListener('change', (e) => {
-      document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
-      updateTplGroupCheckboxes();
-  });
-
-  document.querySelectorAll('.tpl-group-select').forEach(groupCb => {
-      groupCb.addEventListener('change', (e) => {
-          const group = e.target.dataset.group;
-          const isChecked = e.target.checked;
-          document.querySelectorAll(`.tpl-attr-checkbox.tpl-group-${group}`).forEach(cb => {
-              if (!cb.disabled) cb.checked = isChecked;
-          });
-          updateTplGroupCheckboxes();
-      });
-  });
-
-  document.querySelectorAll('.tpl-attr-checkbox').forEach(cb => {
-      cb.addEventListener('change', () => {
-          updateTplGroupCheckboxes();
-      });
-  });
-
-  function selectAttributesForTemplate(watchlistId) {
-      // 1. Reset all to uncheck first (but keep mandatory/disabled ones)
-      document.querySelectorAll('.tpl-attr-checkbox:not(:disabled)').forEach(cb => cb.checked = false);
-
-      // 2. Load existing template or default
-      const key = getWatchlistContainerKey();
-      chrome.storage.local.get([key], (data) => {
-          const container = data[key];
-          let selected = [];
-
-          if (container && container[watchlistId] && container[watchlistId].template && container[watchlistId].template.length > 0) {
-              selected = container[watchlistId].template;
-          } else {
-              // Default
-               selected = ['mediaAsin', 'metaTitle', 'displayPrice'];
-          }
-
-          // Apply selection
-          selected.forEach(val => {
-              const cb = document.querySelector(`.tpl-attr-checkbox[value="${val}"]`);
-              if (cb && !cb.disabled) cb.checked = true;
-          });
-
-          updateTplGroupCheckboxes();
-
-          // Store ID for save button context
-          saveTemplateBtn.dataset.watchlistId = watchlistId;
-
-          templateModal.showModal();
-      });
-  }
-
-  saveTemplateBtn.addEventListener('click', () => {
-      const watchlistId = saveTemplateBtn.dataset.watchlistId;
-      if (!watchlistId) return;
-
-      const selected = Array.from(document.querySelectorAll('.tpl-attr-checkbox:checked')).map(cb => cb.value);
-      const key = getWatchlistContainerKey();
-
-      chrome.storage.local.get([key], (data) => {
-          const container = data[key];
-          if (container && container[watchlistId]) {
-              container[watchlistId].template = selected;
-              chrome.storage.local.set({ [key]: container }, () => {
-                  templateModal.close();
-              });
-          }
-      });
-  });
-
-  // Add "Edit Template" Button next to controls
-  const editTemplateBtn = document.createElement('button');
-  editTemplateBtn.textContent = '⚙️';
-  editTemplateBtn.title = 'Edit Attribute Template';
-  editTemplateBtn.style.padding = '6px';
-  editTemplateBtn.style.width = 'auto';
-  editTemplateBtn.style.flex = 'none';
-  editTemplateBtn.onclick = () => selectAttributesForTemplate(currentWatchlistId);
-  deleteWatchlistBtn.before(editTemplateBtn);
-
-  // New Feature: Download Template CSV
-  const downloadTemplateBtn = document.createElement('button');
-  downloadTemplateBtn.textContent = '📥 Get CSV Template';
-  downloadTemplateBtn.className = 'action-btn';
-  downloadTemplateBtn.style.marginTop = '8px';
-  downloadTemplateBtn.style.display = 'block';
-  downloadTemplateBtn.style.width = '100%';
-
-  downloadTemplateBtn.onclick = () => {
-      const key = getWatchlistContainerKey();
-      chrome.storage.local.get([key], (data) => {
-          const container = data[key];
-          const template = (container && container[currentWatchlistId] && container[currentWatchlistId].template.length > 0)
-                           ? container[currentWatchlistId].template
-                           : ['url', 'queryASIN', 'expected title', 'expected bullets', 'initial price']; // Default if empty
-
-          // Ensure mandatory fields for import match the CSV parser logic
-          let headers = ['URL', 'ASIN']; // Mandatory for parser logic
-
-          // Map internal keys to CSV headers (simplification)
-          const attrToHeader = {
-              'metaTitle': 'Expected Title',
-              'bullets': 'Expected Bullets',
-              'displayPrice': 'Initial Price'
-          };
-
-          template.forEach(attr => {
-              if (attrToHeader[attr] && !headers.includes(attrToHeader[attr])) headers.push(attrToHeader[attr]);
-              else if (!headers.includes(attr) && attr !== 'url' && attr !== 'queryASIN' && attr !== 'mediaAsin') headers.push(attr);
-          });
-
-          const csvContent = headers.join(",") + "\n";
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.setAttribute("href", url);
-          link.setAttribute("download", `Template_${container[currentWatchlistId].name}.csv`);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-      });
-  };
-
-  // Insert download button in Watchlist section
-  document.getElementById('watchlistSection').appendChild(downloadTemplateBtn);
-
-  // Template Download for Auditor Mode (XLSX)
-  downloadAuditorTemplateBtn.addEventListener('click', () => {
-      if (typeof XLSX === 'undefined') { alert("SheetJS not loaded."); return; }
-
-      const wb = XLSX.utils.book_new();
-
-      // 1. Instructions Sheet
-      const instructions = [
-          ["Listing Auditor Template Instructions"],
-          [""],
-          ["Column Name", "Description", "Format"],
-          ["ASIN", "Target ASIN to audit", "B0..."],
-          ["Marketplace", "Amazon Domain (Optional)", "Amazon.com"],
-          ["Approved Title", "Exact title text to match", "Text"],
-          ["Approved Bullets", "Bullet text to match (contains)", "Text"],
-          ["Approved Description", "Description text to match (contains)", "Text"],
-          ["Reference Rating", "Minimum Acceptable Rating", "Number (e.g. 4.5)"],
-          ["Reference Reviews", "Minimum Review Count", "Number"],
-          ["Approved Images", "List of Image URLs", "Comma separated URLs"],
-          ["Approved Video Count", "Expected number of videos", "Number"],
-          ["Approved Brand Story Images", "List of Brand Story Image URLs", "Comma separated URLs"],
-          ["Approved A+ Modules", "List of A+ Module Image URLs", "Comma separated URLs"],
-          ["Approved Comparison ASINs", "List of ASINs in Comparison Chart", "Comma separated ASINs"],
-          ["Approved Variation Count", "Expected Total Variations", "Number"],
-          ["Approved Variation Theme", "Expected Theme Name", "Text (e.g. Size, Color)"],
-          ["Approved Seller", "Expected BuyBox Seller Name", "Text"],
-          ["Approved Price", "Expected Price", "Number"],
-          ["Max Delivery Days", "Maximum acceptable delivery time", "Number"]
-      ];
-      const wsInst = XLSX.utils.aoa_to_sheet(instructions);
-      XLSX.utils.book_append_sheet(wb, wsInst, "Instructions");
-
-      // 2. Data Sheet
-      const headers = [
-          "ASIN", "Marketplace",
-          "Approved Title", "Approved Bullets", "Approved Description",
-          "Reference Rating", "Reference Reviews",
-          "Approved Images", "Approved Video Count",
-          "Approved Brand Story Images", "Approved A+ Modules",
-          "Approved Comparison ASINs",
-          "Approved Variation Count", "Approved Variation Theme",
-          "Approved Seller", "Approved Price",
-          "Max Delivery Days"
-      ];
-      const wsData = XLSX.utils.aoa_to_sheet([headers]);
-      XLSX.utils.book_append_sheet(wb, wsData, "Data");
-
-      XLSX.writeFile(wb, "Auditor_Template.xlsx");
-  });
-  // --- Feature: Visual Tracker (Chart.js) ---
-  const chartModal = document.getElementById('chartModal');
-  const closeChartBtn = document.getElementById('closeChartBtn');
-  const ctx = document.getElementById('historyChart').getContext('2d');
-  let historyChart = null;
-
-  closeChartBtn.addEventListener('click', () => chartModal.close());
-
-  const showHistoryChart = (item) => {
-      if (!item.history || item.history.length < 2) {
-          alert("Not enough history data to show trends.");
-          return;
-      }
-
-      // Filter and format data
-      const dataPoints = item.history
-          .filter(h => h.price && h.price !== 'none')
-          .map(h => ({
-              x: new Date(h.date).toLocaleDateString(),
-              y: parseFloat(h.price.replace(/[^0-9.]/g, ''))
-          }));
-
-      if (dataPoints.length === 0) {
-          alert("No valid price history found.");
-          return;
-      }
-
-      if (historyChart) {
-          historyChart.destroy();
-      }
-
-      historyChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-              labels: dataPoints.map(d => d.x),
-              datasets: [{
-                  label: 'Price History (' + item.asin + ')',
-                  data: dataPoints.map(d => d.y),
-                  borderColor: '#2563eb',
-                  tension: 0.1
-              }]
-          },
-          options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              scales: {
-                  y: {
-                      beginAtZero: false
-                  }
-              }
-          }
-      });
-
-      chartModal.showModal();
-  };
-  // --- Feature: Cloud Sync (Firestore) ---
-
-  const syncToFirestore = async (container) => {
-      if (!IS_LOGGED_IN || !USER_INFO || !USER_INFO.email) return;
-
-      try {
-          // Use email as key since we don't have full Firebase Auth UID yet
-          // In production, signInWithCredential should be used to get true UID
-          const userKey = USER_INFO.email.replace(/[.]/g, '_');
-          const docRef = doc(db, "users", userKey);
-
-          await setDoc(docRef, { watchlists: container }, { merge: true });
-          console.log("Synced to Cloud");
-          statusDiv.textContent = "Synced to Cloud";
-          setTimeout(() => statusDiv.textContent = "Ready to scan.", 2000);
-      } catch (e) {
-          console.error("Sync Error", e);
-      }
-  };
-
-  const fetchFromFirestore = async () => {
-      if (!IS_LOGGED_IN || !USER_INFO || !USER_INFO.email) return;
-
-      try {
-          const userKey = USER_INFO.email.replace(/[.]/g, '_');
-          const docRef = doc(db, "users", userKey);
-          const docSnap = await getDoc(docRef);
-
-          if (docSnap.exists()) {
-              const data = docSnap.data();
-              if (data.watchlists) {
-                  // Merge strategy: Cloud wins for now to ensure consistency across devices
-                  const key = getWatchlistContainerKey();
-                  chrome.storage.local.set({ [key]: data.watchlists }, () => {
-                      loadWatchlist();
-                      console.log("Pulled from Cloud");
-                  });
-              }
-          }
-      } catch (e) {
-          console.error("Fetch Error", e);
-      }
-  };
 
   // Init Watchlists
   initWatchlists(() => {

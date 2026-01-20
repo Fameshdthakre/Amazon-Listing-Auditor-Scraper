@@ -268,8 +268,8 @@
     <div class="mode-tabs">
       <div class="mode-tab active" id="tabCurrent">Current Window</div>
       <div class="mode-tab disabled" id="tabBulk">Bulk / CSV <span class="lock-icon">🔒</span></div>
-      <div class="mode-tab" id="tabWatchlist">Watchlist</div>
       <div class="mode-tab disabled" id="tabAuditor" style="display:none;">Auditor Setup <span class="lock-icon">🔒</span></div>
+      <div class="mode-tab" id="tabWatchlist" style="display:none !important;">Watchlist</div>
       <div class="mode-tab disabled" id="tabVendor" style="display:none;">Vendor (Auth) <span class="lock-icon">🔒</span></div>
     </div>
     
@@ -278,7 +278,7 @@
             <button id="pasteLinksBtn" style="flex:1; padding: 10px; font-size: 12px; background: var(--surface); border: 1px dashed var(--primary); color: var(--primary); font-weight: 600; cursor: pointer; border-radius: 6px;">
                  📋 Paste (Limit: 10)
             </button>
-            <button id="snapshotBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(254, 215, 170, 0.2); border: 1px solid #fed7aa; color: #c2410c; font-weight: 600; cursor: pointer; border-radius: 6px;">
+            <button id="snapshotBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(254, 215, 170, 0.2); border: 1px solid #fed7aa; color: #c2410c; font-weight: 600; cursor: pointer; border-radius: 6px;">
                  📸 Snapshot
             </button>
         </div>
@@ -297,7 +297,7 @@
               <button id="pasteBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(240, 249, 255, 0.5); border: 2px dashed var(--primary); color: var(--primary); font-weight: 700; cursor: pointer; border-radius: 6px;">
                  📋 Paste Links
               </button>
-              <button id="importWatchlistBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(255, 237, 213, 0.5); border: 2px dashed #fb923c; color: #c2410c; font-weight: 700; cursor: pointer; border-radius: 6px;">
+              <button id="importWatchlistBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(255, 237, 213, 0.5); border: 2px dashed #fb923c; color: #c2410c; font-weight: 700; cursor: pointer; border-radius: 6px;">
                  📥 Import Watchlist
               </button>
           </div>
@@ -350,7 +350,7 @@
         <div id="auditorFileStatus" style="font-size:11px; color:var(--success); margin-top:4px; font-weight:600;"></div>
     </div>
 
-    <div id="watchlistSection">
+    <div id="watchlistSection" style="display:none !important;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <div class="bulk-hint" style="margin:0;">Manage Your Watchlist</div>
             <div id="watchlistLimitMsg" style="font-size:10px; color:var(--text-muted);">Limit: 10 (Free)</div>
@@ -384,9 +384,10 @@
         </button>
     </div>
 
-    <div class="options-container">
+    <!-- Scraping Configuration Container -->
+    <div id="scrapingConfig" class="options-container">
       <div class="options-header">
-        <span>Audit Configuration</span>
+        <span>Scraping Configuration</span>
         <label style="cursor:pointer; display:flex; align-items:center;">
             <input type="checkbox" id="selectAll" checked style="margin-right:4px;"> Select All
         </label>
@@ -435,7 +436,7 @@
         <div class="section-label">
             <div style="display:flex; align-items:center; gap:6px;">
                 <input type="checkbox" class="group-select" data-group="content" checked disabled>
-                <span>Content Audit</span>
+                <span>Content Assets</span>
                 <span class="lock-icon">🔒</span>
             </div>
         </div>
@@ -457,6 +458,32 @@
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="videos" checked disabled> Videos Links</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="imgVariantCount" checked disabled> Image Link Count</label></div>
         <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="imgVariantDetails" checked disabled> Image Link Details</label></div>
+      </div>
+    </div>
+
+    <!-- NEW: Audit Configuration Container -->
+    <div id="auditConfig" class="options-container" style="display:none;">
+      <div class="options-header">
+        <span>Audit Configuration</span>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+            <input type="checkbox" id="auditSelectAll" checked style="margin-right:4px;"> Select All
+        </label>
+      </div>
+
+      <div class="attributes-grid">
+        <div class="section-label">
+            <span>Audit Points</span>
+        </div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditContent" checked> Content Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditGrowth" checked> Growth Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditImage" checked> Image Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditVideo" checked> Video Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditBrandStory" checked> Brand Story Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditAplus" checked> A+ Content Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditComparison" checked> Comparison Chart Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditVariation" checked> Variation Family Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditBuyBox" checked> BuyBox Ownership Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditDelivery" checked> Delivery Promise Audit</label></div>
       </div>
     </div>
 
