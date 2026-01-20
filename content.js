@@ -138,7 +138,7 @@
 
             offerCards.forEach(card => {
                 try {
-                    const priceEl = card.querySelector('span[id*="aod-price"] > div > span[class*="a-price"] > span[class*="a-offscreen"]');
+                    const priceEl = card.querySelector('span[id*="aod-price"] > div > span[class*="aok-offscreen"]');
                     const price = priceEl ? priceEl.textContent.trim() : "none";
 
                     const shipsFromEl = card.querySelector('div[id="aod-offer-shipsFrom"] .a-col-right .a-size-small');
@@ -154,8 +154,14 @@
                     const reviewsEl = card.querySelector('div[id="aod-offer-seller-rating"] > span[id*="seller-rating-count"] > span');
                     const reviews = reviewsEl ? reviewsEl.textContent.trim() : "none";
 
+                    let sellerDeliveryTime = "none";
+                    const sellerDeliveryPromise = card.querySelector('span[data-csa-c-type="element"][data-csa-c-content-id="DEXUnifiedCXPDM"]');
+                    if (sellerDeliveryPromise) {
+                        sellerDeliveryTime = sellerDeliveryPromise.getAttribute('data-csa-c-delivery-time') || "none";
+                    }
+
                     if (price !== "none") {
-                        offers.push({ price, shipsFrom, soldBy, rating, reviews });
+                        offers.push({ price, shipsFrom, soldBy, rating, reviews, sellerDeliveryTime });
                     }
                 } catch(e) {}
             });
