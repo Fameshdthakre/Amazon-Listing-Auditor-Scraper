@@ -1600,17 +1600,15 @@ document.addEventListener('DOMContentLoaded', () => {
       'marketplace', 'deliveryLocation', 'queryASIN', 'mediaAsin', 'url', 'parentAsin', 'brand', 'metaTitle',
       'bullets', 'bulletsCount', 'description', 'displayPrice', 'soldBy',
       'freeDeliveryDate', 'primeOrFastestDeliveryDate', 'paidDeliveryDate',
-      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails'
+      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails',
+      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
+      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
+      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
       // Note: 'full list of sellers' is handled via secondary tab 'offers' if AOD data exists
   ];
 
   // 2. Audit Mode Columns (Superset including booleans and counts)
-  const AUDIT_COLUMNS = [
-      ...SCRAPING_COLUMNS,
-      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
-      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
-      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
-  ];
+  const AUDIT_COLUMNS = [...SCRAPING_COLUMNS];
 
   const MASTER_COLUMNS = [
     { key: 'status', header: 'status' },
