@@ -1151,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
           statusEl.textContent = "Failed to read clipboard.";
       }
   };
-  pasteLinksBtn.addEventListener('click', () => handlePaste(GUEST_LIMIT, pasteStatus));
+  pasteLinksBtn.addEventListener('click', () => handlePaste(PRO_LIMIT, pasteStatus));
   pasteBtn.addEventListener('click', () => handlePaste(PRO_LIMIT, fileStatus));
 
   // Enhanced CSV Parser for Type 2 Audit

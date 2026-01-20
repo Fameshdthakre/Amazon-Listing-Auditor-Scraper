@@ -270,13 +270,12 @@
       <div class="mode-tab disabled" id="tabBulk">Bulk / CSV <span class="lock-icon">🔒</span></div>
       <div class="mode-tab disabled" id="tabAuditor" style="display:none;">Auditor Setup <span class="lock-icon">🔒</span></div>
       <div class="mode-tab" id="tabWatchlist" style="display:none !important;">Watchlist</div>
-      <div class="mode-tab disabled" id="tabVendor" style="display:none;">Vendor (Auth) <span class="lock-icon">🔒</span></div>
     </div>
     
     <div id="currentSection">
         <div style="display:flex; gap:8px;">
-            <button id="pasteLinksBtn" style="flex:1; padding: 10px; font-size: 12px; background: var(--surface); border: 1px dashed var(--primary); color: var(--primary); font-weight: 600; cursor: pointer; border-radius: 6px;">
-                 📋 Paste (Limit: 10)
+            <button id="pasteLinksBtn" style="flex:1; padding: 10px; font-size: 12px; background: var(--surface); border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; cursor: pointer; border-radius: 6px;">
+                 📋 Paste ASINs
             </button>
             <button id="snapshotBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(254, 215, 170, 0.2); border: 1px solid #fed7aa; color: #c2410c; font-weight: 600; cursor: pointer; border-radius: 6px;">
                  📸 Snapshot
@@ -294,8 +293,8 @@
             <input type="file" id="csvInput" accept=".csv, .txt">
           </div>
           <div style="display:flex; gap:8px;">
-              <button id="pasteBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(240, 249, 255, 0.5); border: 2px dashed var(--primary); color: var(--primary); font-weight: 700; cursor: pointer; border-radius: 6px;">
-                 📋 Paste Links
+              <button id="pasteBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(15, 23, 42, 1); border: 2px dashed var(--primary); color: var(--primary); font-weight: 700; cursor: pointer; border-radius: 6px;">
+                 📋 Paste ASINs
               </button>
               <button id="importWatchlistBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(255, 237, 213, 0.5); border: 2px dashed #fb923c; color: #c2410c; font-weight: 700; cursor: pointer; border-radius: 6px;">
                  📥 Import Watchlist
@@ -344,7 +343,7 @@
         <div class="file-input-wrapper" style="margin-bottom: 8px;">
           <input type="file" id="auditorInput" accept=".xlsx, .xls">
         </div>
-        <button id="downloadAuditorTemplateBtn" style="width:100%; margin-top:4px; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+        <button id="downloadAuditorTemplateBtn" style="width:100%; margin-top:4px; padding:8px; font-size:11px; accent-color:var(--primary);' background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer;">
             📥 Download Auditor Template
         </button>
         <div id="auditorFileStatus" style="font-size:11px; color:var(--success); margin-top:4px; font-weight:600;"></div>
