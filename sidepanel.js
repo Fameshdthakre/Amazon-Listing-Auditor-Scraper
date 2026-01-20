@@ -1345,6 +1345,46 @@ document.addEventListener('DOMContentLoaded', () => {
   csvInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], fileStatus, 'bulk'));
   auditorInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], auditorFileStatus, 'auditor'));
 
+  // --- Template Downloads ---
+
+  if (downloadAuditorTemplateBtn) {
+      downloadAuditorTemplateBtn.addEventListener('click', () => {
+          if (typeof XLSX === 'undefined') { alert("XLSX library not found."); return; }
+
+          const headers = [
+              "ASIN", "Marketplace",
+              "Approved Title", "Approved Bullets", "Approved Description",
+              "Reference Rating", "Reference Reviews",
+              "Approved Images", "Approved Video Count",
+              "Approved Brand Story Images", "Approved A+ Modules",
+              "Approved Comparison ASINs",
+              "Approved Variation Count", "Approved Variation Theme",
+              "Approved Seller", "Approved Price",
+              "Max Delivery Days"
+          ];
+
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet([headers]);
+          // Add a sample row
+          const sample = ["B000000000", "Amazon.com", "Sample Title", "Feature 1 | Feature 2", "Sample Desc", "4.5", "100", "http://img.com/1.jpg, http://img.com/2.jpg", "1", "http://brand.com/1.jpg", "http://aplus.com/1.jpg", "B001, B002", "3", "Color", "Amazon", "19.99", "2"];
+          XLSX.utils.sheet_add_aoa(ws, [sample], {origin: -1});
+
+          XLSX.utils.book_append_sheet(wb, ws, "Auditor Template");
+          XLSX.writeFile(wb, "Auditor_Template.xlsx");
+      });
+  }
+
+  if (downloadAuditTemplateBtn) { // Bulk Type 2 Template
+      downloadAuditTemplateBtn.addEventListener('click', () => {
+          if (typeof XLSX === 'undefined') { alert("XLSX library not found."); return; }
+          const headers = ["URL", "Expected Title", "Expected Bullets"];
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet([headers]);
+          XLSX.utils.book_append_sheet(wb, ws, "Bulk Template");
+          XLSX.writeFile(wb, "Bulk_Comparison_Template.xlsx");
+      });
+  }
+
   scanBtn.addEventListener('click', async () => {
     let urlsToProcess = [];
 
