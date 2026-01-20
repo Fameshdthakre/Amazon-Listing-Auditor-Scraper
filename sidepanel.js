@@ -1805,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Always create Offers tab if data exists, or conditionally? Let's check results first.
     // If ANY result has aodData, we create the Offers tab.
     const hasAOD = results.some(r => r.attributes && r.attributes.aodData && r.attributes.aodData.length > 0);
-    if (hasAOD) tabMap.offers = createTab('offers', ['pageASIN', 'seller', 'price', 'ships_from', 'rating', 'reviews', 'delivery_time']);
+    if (hasAOD) tabMap.offers = createTab('offers', ['pageASIN', 'price', 'ships_from', 'sold_by', 'rating', 'reviews', 'delivery_time']);
 
     const rows = results.map(tabData => {
         let rowStatus = "SUCCESS";
@@ -1930,9 +1930,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 tabData.attributes.aodData.forEach(offer => {
                     tabMap.offers.rows.push([
                         pageASIN,
-                        offer.soldBy || 'unknown',
                         offer.price || 'none',
                         offer.shipsFrom || 'none',
+                        offer.soldBy || 'unknown',
                         offer.rating || 'none',
                         offer.reviews || 'none',
                         offer.sellerDeliveryTime || 'none'

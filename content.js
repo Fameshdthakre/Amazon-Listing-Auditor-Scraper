@@ -134,7 +134,8 @@
 
             // 4. Extract Offers
             const offers = [];
-            const offerCards = document.querySelectorAll('div[id="aod-offer-list"] > div');
+            // Select Pinned Offer (Buy Box) AND the list of other offers
+            const offerCards = document.querySelectorAll('#aod-pinned-offer, #aod-offer-list > div');
 
             offerCards.forEach(card => {
                 try {
