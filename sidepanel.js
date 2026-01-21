@@ -1,6 +1,7 @@
 import { app, db } from './firebase/firebase-config.js';
   import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
   import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
+  import { MS_CLIENT_ID, MS_AUTH_URL, MS_SCOPES } from './config.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // Elements
@@ -98,11 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let previousIsScanning = false;
   let clearConfirmationPending = false; 
   let currentIsScanning = false;
-
-  // --- CONFIG: Microsoft Auth ---
-  const MS_CLIENT_ID = "88f7ac32-e2ab-401f-8019-f1780e23685d"; 
-  const MS_AUTH_URL = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`;
-  const MS_SCOPES = "openid profile User.Read email Files.ReadWrite";
 
   // --- CONFIG: Firebase ---
   // Firebase initialized in firebase/firebase-config.js and imported at the top of this file.
