@@ -23,12 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Tabs & Sections
   const tabCurrent = document.getElementById('tabCurrent');
   const tabBulk = document.getElementById('tabBulk');
-  const tabCatalogue = document.getElementById('tabCatalogue');
-  const tabAuditor = document.getElementById('tabAuditor');
+  const tabCatalogueSetup = document.getElementById('tabCatalogueSetup');
+
   const bulkSection = document.getElementById('bulkSection');
   const currentSection = document.getElementById('currentSection'); 
   const catalogueSection = document.getElementById('catalogueSection');
-  const auditorSection = document.getElementById('auditorSection');
   
   const pasteLinksBtn = document.getElementById('pasteLinksBtn'); 
   const snapshotBtn = document.getElementById('snapshotBtn'); 
@@ -39,11 +38,76 @@ document.addEventListener('DOMContentLoaded', () => {
   const importCatalogueBtn = document.getElementById('importCatalogueBtn');
   const disableImagesInput = document.getElementById('disableImages');
   const fileStatus = document.getElementById('fileStatus');
-  const auditorFileStatus = document.getElementById('auditorFileStatus');
-  const auditorInput = document.getElementById('auditorInput');
-  const downloadAuditorTemplateBtn = document.getElementById('downloadAuditorTemplateBtn');
-  const auditorCatalogueSelect = document.getElementById('auditorCatalogueSelect');
-  const loadFromCatalogueBtn = document.getElementById('loadFromCatalogueBtn');
+
+  // Catalogue Setup / Auditor Elements
+  const catalogueInput = document.getElementById('catalogueInput');
+  const downloadCatalogueTemplateBtn = document.getElementById('downloadCatalogueTemplateBtn');
+  const triggerImportBtn = document.getElementById('triggerImportBtn');
+  const catalogueImportStatus = document.getElementById('catalogueImportStatus');
+  const exportCatalogueBtn = document.getElementById('exportCatalogueBtn');
+
+  // Trigger File Input logic
+  if (triggerImportBtn && catalogueInput) {
+      triggerImportBtn.addEventListener('click', () => catalogueInput.click());
+      catalogueInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], catalogueImportStatus, 'auditor'));
+  }
+
+  // Export Catalogue Logic
+  if (exportCatalogueBtn) {
+      exportCatalogueBtn.addEventListener('click', () => {
+          const key = getCatalogueContainerKey();
+          chrome.storage.local.get([key], (data) => {
+              const container = data[key];
+              if (!container || !container[currentCatalogueId]) return;
+              const list = container[currentCatalogueId].items;
+              if (list.length === 0) { alert("Catalogue is empty."); return; }
+
+              if (typeof XLSX === 'undefined') { alert("XLSX library not found."); return; }
+
+              const wb = XLSX.utils.book_new();
+              const headers = [
+                  "QueryASIN", "Marketplace",
+                  "Brand", "Source Title", "Source Bullets", "Source Description",
+                  "Reference Rating", "Reference Reviews",
+                  "Approved Images", "Approved Video Count",
+                  "Approved Brand Story Images", "Approved A+ Modules",
+                  "Approved Comparison ASINs",
+                  "Approved Variation Count", "Approved Variation Theme",
+                  "Approved Seller", "Approved Price",
+                  "Max Delivery Days"
+              ];
+
+              const rows = list.map(item => {
+                  const comp = item.comparisonData || {};
+                  return [
+                      item.asin,
+                      "", // Marketplace placeholder
+                      item.expected?.brand || comp.expected_brand,
+                      item.expected?.title || comp.expected_title,
+                      item.expected?.bullets || comp.expected_bullets,
+                      item.expected?.description || comp.expected_description,
+                      comp.expected_rating,
+                      comp.expected_reviews,
+                      comp.expected_images,
+                      comp.expected_video_count,
+                      comp.expected_brand_story,
+                      comp.expected_aplus,
+                      comp.expected_comparison,
+                      comp.expected_variation_count,
+                      comp.expected_variation_theme,
+                      comp.expected_seller,
+                      comp.expected_price,
+                      comp.expected_delivery_days
+                  ];
+              });
+
+              const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+              XLSX.utils.book_append_sheet(wb, ws, "Data");
+              XLSX.writeFile(wb, `${container[currentCatalogueId].name}_Export.xlsx`);
+          });
+      });
+  }
+
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
   const domainSelect = document.getElementById('domainSelect');
@@ -997,9 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
           tabBulk.classList.remove('disabled');
           tabBulk.querySelector('.lock-icon').style.display = 'none';
           
-          tabWatchlist.classList.remove('disabled');
-          tabAuditor.classList.remove('disabled');
-          tabAuditor.querySelector('.lock-icon').style.display = 'none';
+          if(tabCatalogueSetup) tabCatalogueSetup.classList.remove('disabled');
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.disabled = false; el.checked = true; });
           document.querySelectorAll('.group-select').forEach(el => el.disabled = false);
@@ -1015,10 +1077,7 @@ document.addEventListener('DOMContentLoaded', () => {
           tabBulk.classList.add('disabled');
           tabBulk.querySelector('.lock-icon').style.display = 'inline';
           
-          tabWatchlist.classList.remove('disabled');
-
-          tabAuditor.classList.add('disabled');
-          tabAuditor.querySelector('.lock-icon').style.display = 'inline';
+          if(tabCatalogueSetup) tabCatalogueSetup.classList.remove('disabled');
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.checked = false; el.disabled = true; });
           document.querySelector('.group-select[data-group="advanced"]').disabled = true;
@@ -1042,15 +1101,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const scrapingConfig = document.getElementById('scrapingConfig');
       const auditConfig = document.getElementById('auditConfig');
 
-      // Hide Catalogue Everywhere for now
-      // if (tabCatalogue) tabCatalogue.style.display = 'none'; // Removed to re-feature Catalogue
+      // Hide Catalogue Setup Everywhere for now, then show based on mode
+      if (tabCatalogueSetup) tabCatalogueSetup.style.display = 'none';
 
       if (MEGA_MODE === 'scraper') {
-          // Tabs: Show Current, Bulk, Catalogue. Hide Auditor
+          // Tabs: Show Current, Bulk. Hide Catalogue Setup
           tabCurrent.style.display = 'flex';
           tabBulk.style.display = 'flex';
-          if(tabCatalogue) tabCatalogue.style.display = 'flex';
-          tabAuditor.style.display = 'none';
+          if(tabCatalogueSetup) tabCatalogueSetup.style.display = 'none';
 
           // Config Visibility
           if(scrapingConfig) scrapingConfig.style.display = 'block';
@@ -1060,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', () => {
           bulkHintText.textContent = "Upload CSV (Headers: URL) or Paste Links";
 
           // Force valid tab
-          if (mode === 'auditor') tabCurrent.click();
+          if (mode === 'catalogue') tabCurrent.click();
           else if (mode === 'bulk' || mode === 'current') {
               // Stay on current or bulk
           } else {
@@ -1069,17 +1127,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       } else {
           // Auditor Mode
-          // Tabs: Hide Current, Bulk. Show Auditor
+          // Tabs: Hide Current, Bulk. Show Catalogue Setup
           tabCurrent.style.display = 'none';
           tabBulk.style.display = 'none';
-          tabAuditor.style.display = 'flex';
+          if(tabCatalogueSetup) tabCatalogueSetup.style.display = 'flex';
 
           // Config Visibility
           if(scrapingConfig) scrapingConfig.style.display = 'none';
           if(auditConfig) auditConfig.style.display = 'block';
 
           // Force valid tab
-          if (mode !== 'auditor') tabAuditor.click();
+          if (mode !== 'catalogue') tabCatalogueSetup.click();
       }
   };
 
@@ -1184,11 +1242,9 @@ document.addEventListener('DOMContentLoaded', () => {
     mode = 'current';
     tabCurrent.classList.add('active');
     tabBulk.classList.remove('active');
-    tabCatalogue.classList.remove('active');
-    tabAuditor.classList.remove('active');
+    if(tabCatalogueSetup) tabCatalogueSetup.classList.remove('active');
     bulkSection.style.display = 'none';
     catalogueSection.style.display = 'none';
-    auditorSection.style.display = 'none';
     currentSection.style.display = 'block'; 
     scanBtn.textContent = 'Start Audit (Current Tabs)';
   });
@@ -1198,41 +1254,28 @@ document.addEventListener('DOMContentLoaded', () => {
     mode = 'bulk';
     tabBulk.classList.add('active');
     tabCurrent.classList.remove('active');
-    tabCatalogue.classList.remove('active');
-    tabAuditor.classList.remove('active');
+    if(tabCatalogueSetup) tabCatalogueSetup.classList.remove('active');
     bulkSection.style.display = 'block';
     currentSection.style.display = 'none'; 
     catalogueSection.style.display = 'none';
-    auditorSection.style.display = 'none';
     scanBtn.textContent = 'Start Bulk Audit';
   });
 
-  tabCatalogue.addEventListener('click', () => {
-      mode = 'catalogue';
-      tabCatalogue.classList.add('active');
-      tabCurrent.classList.remove('active');
-      tabBulk.classList.remove('active');
-      tabAuditor.classList.remove('active');
-      catalogueSection.style.display = 'block';
-      bulkSection.style.display = 'none';
-      currentSection.style.display = 'none'; 
-      auditorSection.style.display = 'none';
-      loadCatalogue();
-  });
+  if (tabCatalogueSetup) {
+      tabCatalogueSetup.addEventListener('click', () => {
+          if (!IS_LOGGED_IN) { alert("Please Login."); return; }
+          mode = 'catalogue'; // Mode 'catalogue' now drives Auditor workflow
+          tabCatalogueSetup.classList.add('active');
+          tabCurrent.classList.remove('active');
+          tabBulk.classList.remove('active');
 
-  tabAuditor.addEventListener('click', () => {
-      if (!IS_LOGGED_IN) { alert("Please Login."); return; }
-      mode = 'auditor';
-      tabAuditor.classList.add('active');
-      tabCurrent.classList.remove('active');
-      tabBulk.classList.remove('active');
-      tabCatalogue.classList.remove('active');
-      auditorSection.style.display = 'block';
-      bulkSection.style.display = 'none';
-      currentSection.style.display = 'none';
-      catalogueSection.style.display = 'none';
-      scanBtn.textContent = 'Start Auditor Mode';
-  });
+          catalogueSection.style.display = 'block';
+          bulkSection.style.display = 'none';
+          currentSection.style.display = 'none';
+
+          loadCatalogue();
+      });
+  }
 
   const handlePaste = async (limit, statusEl) => {
       try {
@@ -1304,36 +1347,37 @@ document.addEventListener('DOMContentLoaded', () => {
                   if (modeType === 'auditor') {
                       // Auditor Mode Import -> Catalogue
                       const items = json.map(row => {
-                          const asin = row['ASIN'] || row['asin'] || row['Asin'];
-                          const url = row['URL'] || row['url'] || row['Page URL'] || row['page_url'];
-                          // Use ASIN as ID, or extract from URL if missing
+                          // Map new headers: QueryASIN, Brand, Source Title, etc.
+                          const asin = row['QueryASIN'] || row['ASIN'] || row['asin'];
+                          const url = row['URL'] || row['url'];
+
                           let finalAsin = asin;
                           let finalUrl = url ? buildOrNormalizeUrl(url) : null;
 
                           if (!finalAsin && finalUrl) {
                               const m = finalUrl.match(/([a-zA-Z0-9]{10})(?:[/?]|$)/);
                               if (m) finalAsin = m[1];
+                          } else if (finalAsin && !finalUrl) {
+                              finalUrl = `https://www.amazon.com/dp/${finalAsin}`; // Default fallback
                           }
 
-                          if (!finalAsin) return null; // Skip invalid rows without identifier
+                          if (!finalAsin) return null;
 
                           return {
                               asin: finalAsin,
-                              url: finalUrl || `https://www.amazon.com/dp/${finalAsin}`,
-                              auditType: 'type2', // Mark as eligible for audit
+                              url: finalUrl,
+                              auditType: 'type2',
                               expected: {
-                                  brand: row['Brand'] || row['brand'] || "",
-                                  title: row['Title'] || row['title'] || row['Approved Title'] || "",
-                                  bullets: row['Bullets'] || row['bullets'] || row['Approved Bullets'] || "",
-                                  description: row['Description'] || row['description'] || row['Approved Description'] || ""
+                                  brand: row['Brand'] || "",
+                                  title: row['Source Title'] || row['Title'] || "",
+                                  bullets: row['Source Bullets'] || row['Bullets'] || "",
+                                  description: row['Source Description'] || row['Description'] || ""
                               },
-                              // Preserve full comparison data for audit execution if needed
                               comparisonData: {
-                                  expected_title: row['Title'] || row['Approved Title'],
-                                  expected_bullets: row['Bullets'] || row['Approved Bullets'],
-                                  expected_description: row['Description'] || row['Approved Description'],
+                                  expected_title: row['Source Title'] || row['Title'],
+                                  expected_bullets: row['Source Bullets'] || row['Bullets'],
+                                  expected_description: row['Source Description'] || row['Description'],
                                   expected_brand: row['Brand'],
-                                  // Map other fields if present in XLSX for audit logic
                                   expected_rating: row['Reference Rating'],
                                   expected_reviews: row['Reference Reviews'],
                                   expected_images: row['Approved Images'],
@@ -1462,13 +1506,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Template Downloads ---
 
-  if (downloadAuditorTemplateBtn) {
-      downloadAuditorTemplateBtn.addEventListener('click', () => {
+  if (downloadCatalogueTemplateBtn) {
+      downloadCatalogueTemplateBtn.addEventListener('click', () => {
           if (typeof XLSX === 'undefined') { alert("XLSX library not found."); return; }
 
+          const wb = XLSX.utils.book_new();
+
+          // Sheet 1: Instructions
+          const instructions = [
+              ["Catalogue Template Instructions"],
+              [""],
+              ["Fill out the 'Data' sheet with your product details."],
+              ["Required Columns (for matching):"],
+              [" - QueryASIN: The ASIN to audit."],
+              [" - Brand: Approved Brand Name."],
+              [" - Source Title: The expected/approved title."],
+              [" - Source Bullets: The expected/approved bullet points."],
+              [" - Source Description: The expected/approved description."],
+              [""],
+              ["Optional Columns (for advanced audit):"],
+              [" - Marketplace: e.g. Amazon.com"],
+              [" - Reference Rating, Reference Reviews, Approved Images, etc."]
+          ];
+          const wsInstr = XLSX.utils.aoa_to_sheet(instructions);
+          XLSX.utils.book_append_sheet(wb, wsInstr, "Instructions");
+
+          // Sheet 2: Data
           const headers = [
-              "ASIN", "Marketplace",
-              "Brand", "Title", "Bullets", "Description",
+              "QueryASIN", "Marketplace",
+              "Brand", "Source Title", "Source Bullets", "Source Description",
               "Reference Rating", "Reference Reviews",
               "Approved Images", "Approved Video Count",
               "Approved Brand Story Images", "Approved A+ Modules",
@@ -1478,13 +1544,12 @@ document.addEventListener('DOMContentLoaded', () => {
               "Max Delivery Days"
           ];
 
-          const wb = XLSX.utils.book_new();
-          const ws = XLSX.utils.aoa_to_sheet([headers]);
+          const wsData = XLSX.utils.aoa_to_sheet([headers]);
           // Add a sample row
           const sample = ["B000000000", "Amazon.com", "My Brand", "Sample Title", "Feature 1 | Feature 2", "Sample Desc", "4.5", "100", "http://img.com/1.jpg, http://img.com/2.jpg", "1", "http://brand.com/1.jpg", "http://aplus.com/1.jpg", "B001, B002", "3", "Color", "Amazon", "19.99", "2"];
-          XLSX.utils.sheet_add_aoa(ws, [sample], {origin: -1});
+          XLSX.utils.sheet_add_aoa(wsData, [sample], {origin: -1});
 
-          XLSX.utils.book_append_sheet(wb, ws, "Catalogue Template");
+          XLSX.utils.book_append_sheet(wb, wsData, "Data");
           XLSX.writeFile(wb, "Catalogue_Template.xlsx");
       });
   }
@@ -1643,7 +1708,6 @@ document.addEventListener('DOMContentLoaded', () => {
           if(currentSection) currentSection.style.display = 'none';
           if(bulkSection) bulkSection.style.display = 'none';
           if(catalogueSection) catalogueSection.style.display = 'none';
-          if(vendorSection) vendorSection.style.display = 'none';
       } else {
           scanBtn.style.display = 'block';
           stopBtn.style.display = 'none';
@@ -1680,7 +1744,6 @@ document.addEventListener('DOMContentLoaded', () => {
               if (mode === 'current') { if(currentSection) currentSection.style.display = 'block'; }
               else if (mode === 'bulk') { if(bulkSection) bulkSection.style.display = 'block'; }
               else if (mode === 'catalogue') { if(catalogueSection) catalogueSection.style.display = 'block'; }
-              else if (mode === 'vendor') { if(vendorSection) vendorSection.style.display = 'block'; }
           }
       }
       
