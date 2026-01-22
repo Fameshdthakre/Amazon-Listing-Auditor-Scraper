@@ -1725,22 +1725,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       if (countdownInterval) clearInterval(countdownInterval);
-      if (isScanning && state.nextActionTime && state.nextActionTime > Date.now()) {
-          const updateTimer = () => {
-             const secondsLeft = Math.ceil((state.nextActionTime - Date.now()) / 1000);
-             if (secondsLeft <= 0) {
-                 clearInterval(countdownInterval);
-                 statusDiv.innerHTML = "Processing next step...";
-             } else {
-                 const baseMsg = state.statusMessage.split('...')[0]; 
-                 statusDiv.innerHTML = `${baseMsg}... Next action in: <b>${secondsLeft}s</b>`;
-             }
-          };
-          updateTimer(); 
-          countdownInterval = setInterval(updateTimer, 1000);
-      } else {
-          statusDiv.innerHTML = state.statusMessage;
-      }
+      // If status message indicates waiting or processing, visually enhance it
+      statusDiv.innerHTML = state.statusMessage;
+
+      // Legacy timer logic removed as delays are now handled in background async flow
+      // We can rely on background status updates which now include "Processing X - Y..."
   }
 
   function updateDashboard(results) {
