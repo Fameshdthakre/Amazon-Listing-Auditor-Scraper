@@ -134,11 +134,12 @@
 
             // 4. Extract Offers
             const offers = [];
-            const offerCards = document.querySelectorAll('div[id="aod-offer-list"] > div');
+            // Select Pinned Offer (Buy Box) AND the list of other offers
+            const offerCards = document.querySelectorAll('#aod-pinned-offer, #aod-offer-list > div');
 
             offerCards.forEach(card => {
                 try {
-                    const priceEl = card.querySelector('span.a-price .a-offscreen');
+                    const priceEl = card.querySelector('span[id*="aod-price"] > div > span[class*="aok-offscreen"]');
                     const price = priceEl ? priceEl.textContent.trim() : "none";
 
                     const shipsFromEl = card.querySelector('div[id="aod-offer-shipsFrom"] .a-col-right .a-size-small');
@@ -147,24 +148,21 @@
                     const soldByEl = card.querySelector('div[id="aod-offer-soldBy"] .a-col-right .a-size-small');
                     const soldBy = soldByEl ? soldByEl.textContent.trim() : "none";
 
-                    // Rating & Reviews (Regex Cleaning)
-                    let rating = "none";
-                    let reviews = "none";
+                    // Rating & Reviews
+                    const ratingEl = card.querySelector('div[id="aod-offer-seller-rating"] > i[class*="aod-seller-rating"] > span');
+                    const rating = ratingEl ? ratingEl.textContent.trim() : "none";
+                    
+                    const reviewsEl = card.querySelector('div[id="aod-offer-seller-rating"] > span[id*="seller-rating-count"] > span');
+                    const reviews = reviewsEl ? reviewsEl.textContent.trim() : "none";
 
-                    const sellerRatingContainer = card.querySelector('div[id="aod-offer-seller-rating"]');
-                    if (sellerRatingContainer) {
-                        const content = sellerRatingContainer.textContent || "";
-                        // Rating: matches (4.5 stars) -> 4.5
-                        const ratingMatch = content.match(/\(([\d.]+)\s*stars?\)/i) || content.match(/^([\d.]+)\s*out/);
-                        if (ratingMatch) rating = ratingMatch[1];
-
-                        // Reviews: matches (123 ratings) -> 123
-                        const reviewMatch = content.match(/\(([\d,]+)\s*ratings?\)/i);
-                        if (reviewMatch) reviews = reviewMatch[1].replace(/,/g, '');
+                    let sellerDeliveryTime = "none";
+                    const sellerDeliveryPromise = card.querySelector('span[data-csa-c-type="element"][data-csa-c-content-id="DEXUnifiedCXPDM"]');
+                    if (sellerDeliveryPromise) {
+                        sellerDeliveryTime = sellerDeliveryPromise.getAttribute('data-csa-c-delivery-time') || "none";
                     }
 
                     if (price !== "none") {
-                        offers.push({ price, shipsFrom, soldBy, rating, reviews });
+                        offers.push({ price, shipsFrom, soldBy, rating, reviews, sellerDeliveryTime });
                     }
                 } catch(e) {}
             });

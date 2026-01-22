@@ -1,6 +1,7 @@
 import { app, db } from './firebase/firebase-config.js';
   import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
   import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
+  import { MS_CLIENT_ID, MS_AUTH_URL, MS_SCOPES } from './config.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // Elements
@@ -36,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const csvInput = document.getElementById('csvInput');
   const pasteBtn = document.getElementById('pasteBtn');
   const importWatchlistBtn = document.getElementById('importWatchlistBtn'); 
-  const batchSizeInput = document.getElementById('batchSizeInput');
   const disableImagesInput = document.getElementById('disableImages');
   const fileStatus = document.getElementById('fileStatus');
   const auditorFileStatus = document.getElementById('auditorFileStatus');
@@ -99,11 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let previousIsScanning = false;
   let clearConfirmationPending = false; 
   let currentIsScanning = false;
-
-  // --- CONFIG: Microsoft Auth ---
-  const MS_CLIENT_ID = "88f7ac32-e2ab-401f-8019-f1780e23685d"; 
-  const MS_AUTH_URL = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`;
-  const MS_SCOPES = "openid profile User.Read email Files.ReadWrite";
 
   // --- CONFIG: Firebase ---
   // Firebase initialized in firebase/firebase-config.js and imported at the top of this file.
@@ -787,10 +782,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   msBtn.addEventListener('click', () => {
-      if (MS_CLIENT_ID === "YOUR_MICROSOFT_CLIENT_ID_HERE") {
-          alert("Developer Config Error: Please add Microsoft Client ID in popup.js");
-          return;
-      }
       const redirectUri = chrome.identity.getRedirectURL();
       const scope = "openid profile User.Read email";
       const nonce = Math.random().toString(36).substring(2, 15);
@@ -1035,12 +1026,6 @@ document.addEventListener('DOMContentLoaded', () => {
     domainSelect.appendChild(option);
   });
   if(marketplaceData['Amazon.com']) domainSelect.value = 'Amazon.com';
-
-  batchSizeInput.addEventListener('input', () => {
-      let val = parseInt(batchSizeInput.value, 10);
-      if (val > 30) batchSizeInput.value = 30;
-      else if (val < 1) batchSizeInput.value = 1;
-  });
 
   const buildOrNormalizeUrl = (input) => {
     input = input.trim();
@@ -1476,11 +1461,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const scrapeAODCb = document.querySelector('.attr-checkbox[value="scrapeAOD"]');
+    const currentWindow = await chrome.windows.getCurrent();
     const settings = {
         disableImages: (mode !== 'current' && disableImagesInput.checked),
         scrapeAOD: scrapeAODCb ? scrapeAODCb.checked : false
     };
-    chrome.runtime.sendMessage({ action: 'START_SCAN', payload: { urls: urlsToProcess, mode, settings } });
+    chrome.runtime.sendMessage({ 
+        action: 'START_SCAN', 
+        payload: { 
+            urls: urlsToProcess, 
+            mode, 
+            settings,
+            targetWindowId: currentWindow.id 
+        } 
+    });
   });
 
   stopBtn.addEventListener('click', () => { chrome.runtime.sendMessage({ action: 'STOP_SCAN' }); });
@@ -1604,17 +1598,15 @@ document.addEventListener('DOMContentLoaded', () => {
       'marketplace', 'deliveryLocation', 'queryASIN', 'mediaAsin', 'url', 'parentAsin', 'brand', 'metaTitle',
       'bullets', 'bulletsCount', 'description', 'displayPrice', 'soldBy',
       'freeDeliveryDate', 'primeOrFastestDeliveryDate', 'paidDeliveryDate',
-      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails'
+      'rating', 'reviews', 'bsr', 'imgVariantCount', 'imgVariantDetails',
+      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
+      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
+      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
       // Note: 'full list of sellers' is handled via secondary tab 'offers' if AOD data exists
   ];
 
   // 2. Audit Mode Columns (Superset including booleans and counts)
-  const AUDIT_COLUMNS = [
-      ...SCRAPING_COLUMNS,
-      'aPlusImgs', 'brandStoryImgs', 'hasAplus', 'hasBrandStory', 'hasBullets', 'hasDescription',
-      'variationExists', 'hasVideo', 'lqs', 'stockStatus',
-      'variationFamily', 'variationCount', 'variationTheme', 'videos', 'videoCount'
-  ];
+  const AUDIT_COLUMNS = [...SCRAPING_COLUMNS];
 
   const MASTER_COLUMNS = [
     { key: 'status', header: 'status' },
@@ -1797,17 +1789,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Only create tabs if the parent field is selected
     const tabMap = {};
-    if (selectedFields.includes('variationFamily')) tabMap.variationFamily = createTab('variationFamily', ['pageASIN']);
-    if (selectedFields.includes('bullets')) tabMap.bullets = createTab('bullets', ['pageASIN']);
-    if (selectedFields.includes('brandStoryImgs')) tabMap.brandStoryImgs = createTab('brandStoryImgs', ['pageASIN']);
-    if (selectedFields.includes('aPlusImgs')) tabMap.aPlusImgs = createTab('aPlusImgs', ['pageASIN']);
-    if (selectedFields.includes('videos')) tabMap.videos = createTab('videos', ['pageASIN']);
+    const countTrackers = { variationFamily: 0, bullets: 0, brandStoryImgs: 0, aPlusImgs: 0, videos: 0 };
+
+    if (selectedFields.includes('variationFamily')) tabMap.variationFamily = createTab('variationFamily', ['pageASIN', 'variation_family_count']);
+    if (selectedFields.includes('bullets')) tabMap.bullets = createTab('bullets', ['pageASIN', 'bullet_count']);
+    if (selectedFields.includes('brandStoryImgs')) tabMap.brandStoryImgs = createTab('brandStoryImgs', ['pageASIN', 'brand_story_image_count']);
+    if (selectedFields.includes('aPlusImgs')) tabMap.aPlusImgs = createTab('aPlusImgs', ['pageASIN', 'aplus_image_count']);
+    if (selectedFields.includes('videos')) tabMap.videos = createTab('videos', ['pageASIN', 'video_count']);
     if (selectedFields.includes('imgVariantDetails')) tabMap.imgVariantDetails = createTab('imgVariantDetails', ['pageASIN', 'variant', 'hiRes', 'large']);
 
     // Always create Offers tab if data exists, or conditionally? Let's check results first.
     // If ANY result has aodData, we create the Offers tab.
     const hasAOD = results.some(r => r.attributes && r.attributes.aodData && r.attributes.aodData.length > 0);
-    if (hasAOD) tabMap.offers = createTab('offers', ['pageASIN', 'seller', 'price', 'ships_from', 'rating', 'reviews']);
+    if (hasAOD) tabMap.offers = createTab('offers', ['pageASIN', 'price', 'ships_from', 'sold_by', 'rating', 'reviews', 'delivery_time']);
 
     const rows = results.map(tabData => {
         let rowStatus = "SUCCESS";
@@ -1880,35 +1874,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch(e) { console.error("Error parsing variationFamily:", e); }
 
                 if (Array.isArray(vFamilies) && vFamilies.length > 0) {
-                    tabMap.variationFamily.rows.push([pageASIN, ...vFamilies]);
+                    if (vFamilies.length > countTrackers.variationFamily) countTrackers.variationFamily = vFamilies.length;
+                    tabMap.variationFamily.rows.push([pageASIN, vFamilies.length, ...vFamilies]);
                 }
             }
             if (tabMap.bullets) {
                 const bText = tabData.attributes.bullets;
                 if (bText && bText !== 'none') {
                     const bList = bText.split('|').map(s => s.trim());
-                    tabMap.bullets.rows.push([pageASIN, ...bList]);
+                    if (bList.length > countTrackers.bullets) countTrackers.bullets = bList.length;
+                    tabMap.bullets.rows.push([pageASIN, bList.length, ...bList]);
                 }
             }
             if (tabMap.brandStoryImgs) {
                 const bs = tabData.attributes.brandStoryImgs;
                 if (Array.isArray(bs) && bs.length > 0) {
                     const urls = bs.map(item => item['brand-story-image']);
-                    tabMap.brandStoryImgs.rows.push([pageASIN, ...urls]);
+                    if (urls.length > countTrackers.brandStoryImgs) countTrackers.brandStoryImgs = urls.length;
+                    tabMap.brandStoryImgs.rows.push([pageASIN, urls.length, ...urls]);
                 }
             }
             if (tabMap.aPlusImgs) {
                 const ap = tabData.attributes.aPlusImgs;
                 if (Array.isArray(ap) && ap.length > 0) {
                     const urls = ap.map(item => item['a-plus-image']);
-                    tabMap.aPlusImgs.rows.push([pageASIN, ...urls]);
+                    if (urls.length > countTrackers.aPlusImgs) countTrackers.aPlusImgs = urls.length;
+                    tabMap.aPlusImgs.rows.push([pageASIN, urls.length, ...urls]);
                 }
             }
             if (tabMap.videos) {
                 const vids = tabData.attributes.videos;
                 if (Array.isArray(vids) && vids.length > 0) {
                     const urls = vids.map(item => item['video_url']);
-                    tabMap.videos.rows.push([pageASIN, ...urls]);
+                    if (urls.length > countTrackers.videos) countTrackers.videos = urls.length;
+                    tabMap.videos.rows.push([pageASIN, urls.length, ...urls]);
                 }
             }
             if (tabMap.imgVariantDetails) {
@@ -1927,11 +1926,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 tabData.attributes.aodData.forEach(offer => {
                     tabMap.offers.rows.push([
                         pageASIN,
-                        offer.soldBy || 'unknown',
                         offer.price || 'none',
                         offer.shipsFrom || 'none',
+                        offer.soldBy || 'unknown',
                         offer.rating || 'none',
-                        offer.reviews || 'none'
+                        offer.reviews || 'none',
+                        offer.sellerDeliveryTime || 'none'
                     ]);
                 });
             }
@@ -2010,6 +2010,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const rowStr = finalHeaders.map(h => cleanField(row[h])).join(",");
         return { rowObj: row, csvLine: rowStr };
     });
+
+    // --- Update Dynamic Headers for Tabs ---
+    if (tabMap.variationFamily) {
+        for(let i=1; i<=countTrackers.variationFamily; i++) tabMap.variationFamily.headers.push(`child_ASIN${i}`);
+    }
+    if (tabMap.bullets) {
+        for(let i=1; i<=countTrackers.bullets; i++) tabMap.bullets.headers.push(`bullet_${i}`);
+    }
+    if (tabMap.brandStoryImgs) {
+        for(let i=1; i<=countTrackers.brandStoryImgs; i++) tabMap.brandStoryImgs.headers.push(`image_${i}`);
+    }
+    if (tabMap.aPlusImgs) {
+        for(let i=1; i<=countTrackers.aPlusImgs; i++) tabMap.aPlusImgs.headers.push(`image_${i}`);
+    }
+    if (tabMap.videos) {
+        for(let i=1; i<=countTrackers.videos; i++) tabMap.videos.headers.push(`video_url_${i}`);
+    }
 
     Object.values(tabMap).forEach(tab => tabsData.push(tab));
 
