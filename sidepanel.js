@@ -1,6 +1,6 @@
-import { app, db } from './firebase/firebase-config.js';
-  import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
-  import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
+// import { app, db } from './firebase/firebase-config.js';
+//   import { doc, setDoc, getDoc } from './firebase/firebase-firestore.js';
+//   import { GoogleAuthProvider, signInWithCredential } from './firebase/firebase-auth.js'; // Assuming auth is available
   import { MS_CLIENT_ID, MS_AUTH_URL, MS_SCOPES } from './config.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -305,8 +305,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const activeList = container[currentCatalogueId];
           renderCatalogue(activeList ? activeList.items : []);
 
-          if (IS_LOGGED_IN) { catalogueLimitMsg.textContent = `Limit: Unlimited (Pro)`; catalogueLimitMsg.style.color = "var(--success)"; }
-          else { catalogueLimitMsg.textContent = `Limit: ${CATALOGUE_GUEST_LIMIT} (Free)`; catalogueLimitMsg.style.color = "var(--text-muted)"; }
+          if (IS_LOGGED_IN) {
+              catalogueLimitMsg.style.display = 'none';
+          } else {
+              catalogueLimitMsg.style.display = 'block';
+              catalogueLimitMsg.textContent = `Limit: ${CATALOGUE_GUEST_LIMIT} (Free)`;
+              catalogueLimitMsg.style.color = "var(--text-muted)";
+          }
       });
   };
 
@@ -531,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           chrome.storage.local.set({ [key]: container }, () => {
               loadCatalogue();
-              // syncToFirestore(container); // Sync to Cloud (Future)
+              // syncToFirestore(container);
               if (mode === 'current') {
                   pasteStatus.textContent = `Saved to Catalogue!`;
                   pasteStatus.style.color = "var(--success)";
@@ -1028,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // and relying on the "users" collection having relaxed rules or using the email as key (as per previous step),
           // we just proceed to sync.
           // Ideally: await signInWithCredential(auth, GoogleAuthProvider.credential(null, session.token));
-          await fetchFromFirestore();
+          // await fetchFromFirestore(); // Disabled for now
       } catch (e) {
           console.error("Firebase Login Sync Error:", e);
       }
@@ -1051,6 +1056,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function updateUIForAuth() {
+      const megaModeSwitch = document.getElementById('megaModeSwitch');
+
       if (IS_LOGGED_IN) {
           googleBtn.style.display = 'none';
           msBtn.style.display = 'none';
@@ -1058,6 +1065,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const name = USER_INFO ? (USER_INFO.name || 'User') : 'Pro User';
           logoutBtn.textContent = `Logout (${name})`;
           
+          // Show Mega Mode Switch
+          if (megaModeSwitch) megaModeSwitch.style.display = 'flex';
+
           tabBulk.classList.remove('disabled');
           tabBulk.querySelector('.lock-icon').style.display = 'none';
           
@@ -1072,12 +1082,21 @@ document.addEventListener('DOMContentLoaded', () => {
           msBtn.style.display = 'flex';
           logoutBtn.style.display = 'none';
           
-          if ((mode === 'bulk' || mode === 'auditor') && !document.getElementById('stopBtn').offsetParent) tabCurrent.click();
+          // Hide Mega Mode Switch & Force Scraper
+          if (megaModeSwitch) megaModeSwitch.style.display = 'none';
+          document.querySelector('input[name="megaMode"][value="scraper"]').checked = true;
+          MEGA_MODE = 'scraper';
+          updateMegaModeUI(); // Ensure UI reflects force switch
+
+          // Ensure Catalogue Setup is hidden/disabled logic handled by Mega Mode UI update mostly,
+          // but we also disable the tab physically here.
+
+          if ((mode === 'bulk' || mode === 'catalogue') && !document.getElementById('stopBtn').offsetParent) tabCurrent.click();
           
           tabBulk.classList.add('disabled');
           tabBulk.querySelector('.lock-icon').style.display = 'inline';
           
-          if(tabCatalogueSetup) tabCatalogueSetup.classList.remove('disabled');
+          if(tabCatalogueSetup) tabCatalogueSetup.classList.add('disabled'); // Disable for guests? User said "Without Login User should only see Scrapper Mode"
 
           document.querySelectorAll('.pro-feature').forEach(el => { el.checked = false; el.disabled = true; });
           document.querySelector('.group-select[data-group="advanced"]').disabled = true;
@@ -1088,7 +1107,7 @@ document.addEventListener('DOMContentLoaded', () => {
           selectAllCheckbox.disabled = true;
       }
       loadCheckboxState(); 
-      loadWatchlist();
+      loadCatalogue();
   }
 
   // --- Mega Mode Switch Logic ---

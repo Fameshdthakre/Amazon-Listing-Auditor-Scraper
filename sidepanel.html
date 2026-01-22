@@ -256,7 +256,7 @@
         </div>
     </div>
     
-    <div style="display:flex; justify-content:center; gap:16px; margin-bottom:12px; padding:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+    <div id="megaModeSwitch" style="display:none; justify-content:center; gap:16px; margin-bottom:12px; padding:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
         <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
             <input type="radio" name="megaMode" value="scraper" checked style="accent-color:var(--primary);"> Scraper Mode
         </label>
@@ -340,11 +340,11 @@
 
         <div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px dashed var(--border);">
             <div style="display:flex; gap:6px; margin-bottom:8px;">
-                <button id="triggerImportBtn" style="flex:1; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+                <button id="triggerImportBtn" style="flex:1; padding:8px; font-size:11px; background:var(--primary); color:white; font-weight:bold; border:1px solid var(--border); border-radius:4px; cursor:pointer;">
                     📤 Import / Upload
                 </button>
                 <input type="file" id="catalogueInput" accept=".xlsx" style="display:none;">
-                <button id="downloadCatalogueTemplateBtn" style="flex:1; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+                <button id="downloadCatalogueTemplateBtn" style="flex:1; padding:8px; font-size:11px; background:var(--primary); color:white; font-weight:bold; border:1px solid var(--border); border-radius:4px; cursor:pointer;">
                     📥 Download Template
                 </button>
             </div>
