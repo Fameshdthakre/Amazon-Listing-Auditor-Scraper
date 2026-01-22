@@ -1265,6 +1265,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bulkSection.style.display = 'none';
     catalogueSection.style.display = 'none';
     currentSection.style.display = 'block'; 
+
+    scanBtn.style.display = 'block'; // Show Scan Btn in Scraper Mode
     scanBtn.textContent = 'Start Audit (Current Tabs)';
   });
 
@@ -1277,6 +1279,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bulkSection.style.display = 'block';
     currentSection.style.display = 'none'; 
     catalogueSection.style.display = 'none';
+
+    scanBtn.style.display = 'block'; // Show Scan Btn in Scraper Mode
     scanBtn.textContent = 'Start Bulk Audit';
   });
 
@@ -1291,6 +1295,8 @@ document.addEventListener('DOMContentLoaded', () => {
           catalogueSection.style.display = 'block';
           bulkSection.style.display = 'none';
           currentSection.style.display = 'none';
+
+          scanBtn.style.display = 'none'; // Hide general Scan Btn in Auditor Mode
 
           loadCatalogue();
       });
@@ -1481,7 +1487,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   csvInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], fileStatus, 'bulk'));
-  auditorInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], auditorFileStatus, 'auditor'));
+  // auditorInput removed in favor of catalogueInput, removing listener to fix ReferenceError
+  // if (auditorInput) auditorInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0], auditorFileStatus, 'auditor'));
 
   if (loadFromCatalogueBtn) {
       loadFromCatalogueBtn.addEventListener('click', () => {
