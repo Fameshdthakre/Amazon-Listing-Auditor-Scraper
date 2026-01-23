@@ -141,9 +141,9 @@ async function processBatch(state) {
         return;
     }
 
-    // Random Batch Size (5-30)
+    // Random Batch Size (5-15) - Reduced Max
     const minBatch = 5;
-    const maxBatch = 30;
+    const maxBatch = 15;
     const batchSize = Math.floor(Math.random() * (maxBatch - minBatch + 1)) + minBatch;
 
     // Get Chunk
@@ -152,6 +152,10 @@ async function processBatch(state) {
 
     state.statusMessage = `Processing ${startIdx + 1} - ${endIdx} of ${total} (Batch Size: ${batchSize})...`;
     await chrome.storage.local.set({ auditState: state });
+
+    // Wait A: Random wait before opening batch (3-10s)
+    const waitA = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+    await new Promise(r => setTimeout(r, waitA));
 
     // Track tabs created in this specific batch to ensure they are all closed
     const batchTabIds = [];
@@ -177,6 +181,10 @@ async function processBatch(state) {
         const chunkPromises = chunk.map(item => auditSingleAsin(item, state, trackCreateTab));
         const chunkResults = await Promise.all(chunkPromises);
 
+        // Wait B: Random wait after processing/grabbing data (3-10s)
+        const waitB = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+        await new Promise(r => setTimeout(r, waitB));
+
         // Update State with Results
         state.results.push(...chunkResults);
         state.processedCount += chunkResults.length;
@@ -200,9 +208,10 @@ async function processBatch(state) {
             }
         }
 
-        // Schedule next batch
+        // Schedule next batch with Random Delay (3-10s)
         if (state.isScanning) {
-             createAlarm('QUEUE_PROCESS', 1000);
+             const nextDelay = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+             createAlarm('QUEUE_PROCESS', nextDelay);
         }
     }
 }
@@ -235,6 +244,10 @@ async function auditSingleAsin(item, state, trackCreateTab) {
     try {
         // 2. Wait for Load
         await waitForTabLoad(tab.id);
+
+        // Wait C: "3-10 sec to grab data" simulation inside the tab interaction
+        const waitC = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+        await new Promise(r => setTimeout(r, waitC));
 
         // 3. Inject Flags (AOD, etc) if needed
         if (state.settings && state.settings.scrapeAOD && !isVC) {
@@ -314,6 +327,15 @@ async function finishScan(state) {
   state.statusMessage = "Scan complete.";
   state.nextActionTime = null;
   await chrome.storage.local.set({ auditState: state });
+
+  // Notify frontend to update Catalogue status if applicable
+  try {
+      chrome.runtime.sendMessage({ 
+          action: 'SCAN_COMPLETE', 
+          mode: state.mode, 
+          results: state.results 
+      }).catch(() => {}); // Ignore if no listener (e.g. sidepanel closed)
+  } catch(e) {}
 
   if (state.settings.disableImages) {
     await chrome.declarativeNetRequest.updateEnabledRulesets({
