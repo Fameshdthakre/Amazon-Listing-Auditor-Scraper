@@ -242,10 +242,10 @@
     <div class="top-bar">
         <h2>
             <img src="icon48.png" class="app-logo" alt="Logo">
-            Listing Auditor <span class="badge">v1.0.3</span>
+            Listing Auditor <span class="badge">v1.0.4</span>
         </h2>
         <div class="auth-actions" id="authActions">
-            <button id="themeToggle" class="auth-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button id="themeToggle" class="auth-btn" title="Toggle Dark/Light Mode" aria-label="Toggle color theme">🌙</button>
             <button id="googleBtn" class="auth-btn btn-google">
                 <span>G</span> Google
             </button>
@@ -353,9 +353,9 @@
 
         <div style="display:flex; gap:6px; margin-bottom:12px; align-items:center;">
             <select id="catalogueSelect" style="flex:1;"></select>
-            <button id="newCatalogueBtn" title="Create New Catalogue" style="padding:6px; width:auto; flex:none;">➕</button>
-            <button id="renameCatalogueBtn" title="Rename Catalogue" style="padding:6px; width:auto; flex:none;">✏️</button>
-            <button id="deleteCatalogueBtn" title="Delete Catalogue" style="padding:6px; width:auto; flex:none; color:var(--danger);">🗑️</button>
+            <button id="newCatalogueBtn" title="Create New Catalogue" aria-label="Create new catalogue" style="padding:6px; width:auto; flex:none;">➕</button>
+            <button id="renameCatalogueBtn" title="Rename Catalogue" aria-label="Rename current catalogue" style="padding:6px; width:auto; flex:none;">✏️</button>
+            <button id="deleteCatalogueBtn" title="Delete Catalogue" aria-label="Delete current catalogue" style="padding:6px; width:auto; flex:none; color:var(--danger);">🗑️</button>
         </div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -560,7 +560,7 @@
   <dialog id="previewModal">
       <div class="modal-header">
           <span>Audit Preview</span>
-          <button id="closeModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+          <button id="closeModalBtn" aria-label="Close preview modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
       </div>
       <div class="modal-body" id="modalBody">
       </div>
@@ -572,7 +572,7 @@
   <dialog id="chartModal">
       <div class="modal-header">
           <span>Price History</span>
-          <button id="closeChartBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+          <button id="closeChartBtn" aria-label="Close chart modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
       </div>
       <div class="modal-body" style="height:300px; padding:10px;">
           <canvas id="historyChart"></canvas>
@@ -582,7 +582,7 @@
   <dialog id="inputModal">
       <div class="modal-header">
           <span id="inputModalTitle">Catalogue Name</span>
-          <button id="closeInputModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+          <button id="closeInputModalBtn" aria-label="Close input modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
       </div>
       <div class="modal-body" style="padding: 16px;">
           <input type="text" id="catalogueNameInput" placeholder="Enter name..." style="width: 100%; padding: 8px; box-sizing: border-box;">
@@ -595,7 +595,7 @@
   <dialog id="saveToCatalogueModal">
       <div class="modal-header">
           <span>Import to Catalogue</span>
-          <button id="closeSaveModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+          <button id="closeSaveModalBtn" aria-label="Close save modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
       </div>
       <div class="modal-body" style="padding: 16px;">
           <p style="margin-top:0; font-size:12px; color:var(--text-muted);">Select where to save the imported items:</p>
@@ -620,7 +620,7 @@
   <dialog id="templateModal">
       <div class="modal-header">
           <span>Select Attributes to Track</span>
-          <button id="closeTemplateModalBtn" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+          <button id="closeTemplateModalBtn" aria-label="Close template modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
       </div>
 
       <div class="options-header" style="border-top:none; background: var(--bg);">
