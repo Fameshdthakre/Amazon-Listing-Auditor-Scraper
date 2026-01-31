@@ -179,7 +179,7 @@ h2 {
 
 /* Mega Mode Switch */
 #megaModeSwitch {
-  display: none; /* Flex when active */
+  display: flex;
   justify-content: center;
   gap: 4px;
   margin-bottom: 20px;

@@ -67,16 +67,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       const name = user ? (user.name || 'User') : '';
       if(loggedIn) document.getElementById('logoutBtn').textContent = `Logout (${name})`;
 
+      // Mega Mode Switch Logic - Always Visible, but Auditor Locked for Guest
+      const auditorInput = document.querySelector('input[value="auditor"]');
+      const auditorLock = document.querySelector('#lblAuditor .lock-icon');
+
       if (loggedIn) {
+          if(auditorInput) auditorInput.disabled = false;
+          if(auditorLock) auditorLock.classList.add('hidden');
+
           document.getElementById('tabBulk').classList.remove('disabled');
           document.querySelector('#tabBulk .lock-icon').style.display = 'none';
           document.querySelectorAll('.pro-feature').forEach(el => { el.disabled = false; el.checked = true; });
           document.getElementById('selectAll').disabled = false;
       } else {
           // Guest
-          document.querySelector('input[name="megaMode"][value="scraper"]').checked = true;
-          MEGA_MODE = 'scraper';
-          updateMegaModeUI();
+          if(auditorInput) auditorInput.disabled = true;
+          if(auditorLock) auditorLock.classList.remove('hidden');
+
+          // Force Scraper if Auditor was selected (e.g. from prev session state bug)
+          if(MEGA_MODE === 'auditor') {
+             document.querySelector('input[name="megaMode"][value="scraper"]').checked = true;
+             MEGA_MODE = 'scraper';
+             updateMegaModeUI();
+          }
           
           document.getElementById('tabBulk').classList.add('disabled');
           document.querySelector('#tabBulk .lock-icon').style.display = 'inline';

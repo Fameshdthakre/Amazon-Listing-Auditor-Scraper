@@ -24,11 +24,11 @@
     </div>
     
     <div id="megaModeSwitch">
-        <label class="mega-mode-label">
+        <label class="mega-mode-label" id="lblScraper">
             <input type="radio" name="megaMode" value="scraper" checked> Scraper Mode
         </label>
-        <label class="mega-mode-label">
-            <input type="radio" name="megaMode" value="auditor"> Auditor Mode
+        <label class="mega-mode-label" id="lblAuditor">
+            <input type="radio" name="megaMode" value="auditor" disabled> Auditor Mode <span class="lock-icon">🔒</span>
         </label>
     </div>
 
@@ -272,6 +272,21 @@
         <div id="progressCount" style="font-size: 11px; color: var(--primary); font-weight: 600; display: none;">Processed: 0 / 0</div>
     </div>
     
+    <div id="dashboardView">
+      <div class="dash-card">
+        <div class="dash-label">Audited</div>
+        <div class="dash-value" id="statTotal">-</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">Avg LQS</div>
+        <div class="dash-value" id="statLqs">-</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">Issues</div>
+        <div class="dash-value bad" id="statIssues">-</div>
+      </div>
+    </div>
+
     <div id="dashboardView">
       <div class="dash-card">
         <div class="dash-label">Audited</div>
