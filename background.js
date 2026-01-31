@@ -124,7 +124,8 @@ async function startScan(payload) {
       }
       const vcBaseUrl = `https://vendorcentral.amazon.${domain}/imaging/manage?asins=`;
 
-      currentAuditor.start(uniqueAsins, domain, vcBaseUrl, 5, targetWindowId);
+      // Auditor Mode: Max 15 concurrent pairs (15 PDP + 15 VC)
+      currentAuditor.start(uniqueAsins, domain, vcBaseUrl, 15, targetWindowId);
       return;
   }
 
@@ -222,9 +223,9 @@ async function processBatch(state) {
         return;
     }
 
-    // Random Batch Size (5-15) - Reduced Max
+    // Random Batch Size (5-25) - Scraper Mode Cap
     const minBatch = 5;
-    const maxBatch = 15;
+    const maxBatch = 25;
     const batchSize = Math.floor(Math.random() * (maxBatch - minBatch + 1)) + minBatch;
 
     // Get Chunk
