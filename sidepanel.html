@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --primary: #2563eb;       
+      --primary-hover: #1d4ed8;
+      --secondary: #64748b;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --purple: #7c3aed;
+    }
+
+    [data-theme="dark"] {
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --border: #334155;
+        --text-main: #f1f5f9;
+        --text-muted: #94a3b8;
+    }
+    
+    body {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 0;
+      margin: 0;
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-size: 13px; 
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    [data-theme="dark"] .top-bar, 
+    [data-theme="dark"] .options-header { border-color: var(--border) !important; }
+    [data-theme="dark"] .options-header { background: #1e293b !important; }
+    [data-theme="dark"] .dash-card, 
+    [data-theme="dark"] .options-container, 
+    [data-theme="dark"] #bulkSection, 
+    [data-theme="dark"] #catalogueSection {
+        background: var(--surface) !important; 
+        border-color: var(--border) !important; 
+    }
+    [data-theme="dark"] .file-input-wrapper input { color: var(--text-muted); }
+    [data-theme="dark"] select, 
+    [data-theme="dark"] input[type="number"] { background: #0f172a; color: var(--text-main); border-color: var(--border); }
+    [data-theme="dark"] .results-placeholder { background: #1e293b; border-color: var(--border); }
+    [data-theme="dark"] .auth-btn { background: #334155; color: #fff; border-color: #475569; }
+    [data-theme="dark"] .auth-btn:hover { background: #475569; }
+    [data-theme="dark"] #pasteLinksBtn, 
+    [data-theme="dark"] #clearBtn { background: #1e293b !important; border-color: var(--primary) !important; color: var(--primary) !important; }
+    [data-theme="dark"] .mode-tabs { background: var(--border); }
+
+    .app-container {
+        padding: 16px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    h2 {
+      margin: 0;
+      font-size: 15px; 
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .app-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .badge {
+      font-size: 10px;
+      background: var(--purple);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .auth-actions { display: flex; gap: 8px; align-items: center; }
+
+    .auth-btn {
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid transparent;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+    }
+    
+    #themeToggle {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        box-shadow: none;
+    }
+    #themeToggle:hover {
+        background: var(--border);
+        color: var(--text-main);
+    }
+
+    .btn-google { background: #ffffff; color: #3c4043; border-color: #dadce0; font-family: 'Roboto', sans-serif; }
+    .btn-google:hover { background: #f7f8f8; border-color: #d2e3fc; box-shadow: 0 1px 2px rgba(60,64,67,0.1); }
+    .btn-google span { font-weight: 700; font-size: 14px; color: #4285F4; }
+
+    .btn-microsoft { background: #2f2f2f; color: #ffffff; border-color: #2f2f2f; font-family: 'Segoe UI', sans-serif; }
+    .btn-microsoft:hover { background: #3e3e3e; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .btn-microsoft span { font-weight: 700; font-size: 14px; color: #00a4ef; }
+    
+    .btn-logout { border-color: #fecaca; color: var(--danger); background: #fef2f2; display: none; box-shadow: none; }
+    .btn-logout:hover { background: #fee2e2; }
+
+    .mode-tabs { display: flex; background: #e2e8f0; padding: 4px; border-radius: 8px; margin-bottom: 16px; }
+
+    .mode-tab {
+      flex: 1; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; color: var(--text-muted);
+      cursor: pointer; border-radius: 6px; transition: all 0.2s;
+      display: flex; justify-content: center; align-items: center; gap: 5px;
+    }
+
+    .mode-tab.active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .mode-tab.disabled { opacity: 0.6; cursor: not-allowed; color: var(--text-muted); }
+    .lock-icon { font-size: 12px; }
+
+    #bulkSection, #catalogueSection { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    #currentSection { display: block; margin-bottom: 16px; }
+    .bulk-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+    .file-input-wrapper input { width: 100%; font-size: 12px; color: var(--text-muted); }
+    .bulk-controls { display: grid; gap: 10px; margin-top: 10px; }
+    .control-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+    .control-row label { color: var(--text-muted); font-weight: 600; }
+    select, input[type="number"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text-main); font-size: 12px; outline: none; }
+    select:focus, input:focus { border-color: var(--primary); }
+
+    .options-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0; overflow: hidden; margin-bottom: 16px; }
+    .options-header { background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: var(--text-main); }
+    .attributes-grid { padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; max-height: 240px; overflow-y: auto; }
+    .attributes-grid::-webkit-scrollbar { width: 6px; }
+    .attributes-grid::-webkit-scrollbar-track { background: transparent; }
+    .attributes-grid::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .section-label { grid-column: span 2; font-size: 11px; color: var(--primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 10px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed var(--border); display: flex; justify-content: space-between; }
+    .section-label:first-child { margin-top: 0; }
+    .checkbox-item { display: flex; align-items: center; font-size: 12px; color: var(--text-main); }
+    .checkbox-item input { margin: 0 8px 0 0; accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+    .checkbox-item label { cursor: pointer; user-select: none; }
+    .checkbox-item input:disabled + label { color: #cbd5e1; cursor: not-allowed; }
+
+    .btn-group { display: flex; gap: 10px; margin-bottom: 12px; }
+    button { padding: 10px; border-radius: 6px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; flex: 1; }
+    #scanBtn, #auditCatalogueBtn { background: var(--primary); color: white; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
+    #scanBtn:hover, #auditCatalogueBtn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    #scanBtn:disabled, #auditCatalogueBtn:disabled { background: #93c5fd; cursor: not-allowed; transform: none; }
+    #stopBtn { background: var(--danger); color: white; display: none; }
+    #stopBtn:hover { background: #dc2626; }
+    
+    #progressContainer { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 8px; display: none; }
+    #progressBar { background: var(--success); height: 100%; width: 0%; transition: width 0.3s ease; }
+    #status { font-size: 12px; color: var(--text-muted); text-align: center; min-height: 18px; margin-bottom: 12px; font-weight: 500; }
+
+    #dashboardView { display: none; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 4px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .dash-label { font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+    .dash-value { font-size: 20px; font-weight: 700; color: var(--text-main); line-height: 1.2; }
+    .dash-value.bad { color: var(--danger); }
+    .dash-value.good { color: var(--success); }
+
+    .results-placeholder { background-color: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 24px 16px; text-align: center; margin-bottom: 12px; color: var(--text-muted); }
+    .placeholder-icon { font-size: 24px; margin-bottom: 8px; opacity: 0.8; }
+    .placeholder-text strong { display: block; color: var(--text-main); margin-bottom: 4px; }
+    .placeholder-hint { font-size: 11px; color: var(--success); margin-top: 8px; background: rgba(34, 197, 94, 0.1); display: inline-block; padding: 2px 8px; border-radius: 12px; }
+
+    .action-btn { width: 100%; padding: 8px; margin-top: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-main); font-weight: 600; border-radius: 6px; cursor: pointer; display: none; transition: all 0.2s; }
+    .action-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+    #downloadBtn { background: #eff6ff; color: var(--primary); border: 1px solid #bfdbfe; }
+    #downloadBtn:hover { background: #dbeafe; }
+
+    #catalogueItems { max-height: 150px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; background: var(--surface); }
+    .wl-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-main); }
+    .wl-item:last-child { border-bottom: none; }
+    .wl-info { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 8px; }
+    .wl-asin { font-weight: 700; color: var(--primary); }
+    .wl-title { color: var(--text-muted); }
+    .wl-del { cursor: pointer; color: var(--text-muted); font-size: 14px; }
+    .wl-del:hover { color: var(--danger); }
+
+    dialog {
+        border: none; border-radius: 8px; padding: 0; 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        max-width: 90vw; max-height: 80vh; width: 600px;
+        background: var(--surface); color: var(--text-main);
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+    .modal-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+    .modal-body { padding: 0; overflow-y: auto; max-height: 60vh; }
+    .modal-footer { padding: 12px 16px; border-top: 1px solid var(--border); text-align: right; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .preview-table th, .preview-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    .preview-table th { background: var(--bg); position: sticky; top: 0; font-weight: 600; color: var(--text-main); }
+    .status-bad { color: var(--danger); font-weight: 600; }
+    .status-good { color: var(--success); font-weight: 600; }
+
+    .signature { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .signature a { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
+    .signature a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div class="top-bar">
+        <h2>
+            <img src="icon48.png" class="app-logo" alt="Logo">
+            Listing Auditor <span class="badge">v1.0.4</span>
+        </h2>
+        <div class="auth-actions" id="authActions">
+            <button id="themeToggle" class="auth-btn" title="Toggle Dark/Light Mode" aria-label="Toggle color theme">🌙</button>
+            <button id="googleBtn" class="auth-btn btn-google">
+                <span>G</span> Google
+            </button>
+            <button id="msBtn" class="auth-btn btn-microsoft">
+                <span>M</span> Microsoft
+            </button>
+            <button id="logoutBtn" class="auth-btn btn-logout">Logout</button>
+        </div>
+    </div>
+    
+    <div id="megaModeSwitch" style="display:none; justify-content:center; gap:16px; margin-bottom:12px; padding:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="scraper" checked style="accent-color:var(--primary);"> Scraper Mode
+        </label>
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px;">
+            <input type="radio" name="megaMode" value="auditor" style="accent-color:var(--primary);"> Auditor Mode
+        </label>
+    </div>
+
+    <div class="mode-tabs">
+      <div class="mode-tab active" id="tabCurrent">Current Window</div>
+      <div class="mode-tab disabled" id="tabBulk">Bulk / CSV <span class="lock-icon">🔒</span></div>
+      <div class="mode-tab" id="tabCatalogueSetup" style="display:none !important;">Catalogue Setup</div>
+    </div>
+    
+    <div id="currentSection">
+        <div style="display:flex; gap:8px;">
+            <button id="pasteLinksBtn" style="flex:1; padding: 10px; font-size: 12px; background: var(--surface); border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; cursor: pointer; border-radius: 6px;">
+                 📋 Paste ASINs
+            </button>
+            <button id="snapshotBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(254, 215, 170, 0.2); border: 1px solid #fed7aa; color: #c2410c; font-weight: 600; cursor: pointer; border-radius: 6px;">
+                 📸 Snapshot
+            </button>
+        </div>
+        <div id="pasteStatus" style="font-size:11px; text-align:center; margin-top:4px; font-weight:600; min-height:16px;"></div>
+    </div>
+
+    <div id="bulkSection">
+      <div class="bulk-hint" id="bulkHintText">
+          Upload CSV or Paste Links
+      </div>
+      <div style="margin-bottom: 12px;">
+          <div class="file-input-wrapper" style="margin-bottom: 8px;">
+            <input type="file" id="csvInput" accept=".csv, .txt">
+          </div>
+          <div style="display:flex; gap:8px;">
+              <button id="pasteBtn" style="flex:1; padding: 10px; font-size: 12px; background: rgba(15, 23, 42, 1); border: 2px dashed var(--primary); color: var(--primary); font-weight: 700; cursor: pointer; border-radius: 6px;">
+                 📋 Paste ASINs
+              </button>
+              <button id="importCatalogueBtn" style="display:none !important; flex:1; padding: 10px; font-size: 12px; background: rgba(255, 237, 213, 0.5); border: 2px dashed #fb923c; color: #c2410c; font-weight: 700; cursor: pointer; border-radius: 6px;">
+                 📥 Import Catalogue
+              </button>
+          </div>
+          <button id="downloadAuditTemplateBtn" style="width:100%; margin-top:8px; padding:8px; font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:4px; cursor:pointer; display:none;">
+              📥 Download Comparison Template (Audit Type 2)
+          </button>
+          <div style="text-align:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
+              Pro Limit: 30 (Batched)
+          </div>
+      </div>
+      <div class="bulk-controls">
+          <div class="control-row">
+              <label>Marketplace</label>
+              <select id="domainSelect"></select>
+          </div>
+          <div class="control-row">
+              <label>Language</label>
+              <div style="display:flex; gap:8px;">
+                  <label style="font-weight:400"><input type="radio" name="langPref" value="english" checked> English</label>
+                  <label style="font-weight:400"><input type="radio" name="langPref" value="native"> Native</label>
+              </div>
+          </div>
+          <div class="control-row">
+              <label>Options</label>
+              <label style="font-weight:400; cursor:pointer;">
+                  <input type="checkbox" id="disableImages"> Disable Images (Faster)
+              </label>
+          </div>
+      </div>
+      <div id="fileStatus" style="font-size:11px; color:var(--success); margin-top:8px; font-weight:600;"></div>
+    </div>
+
+    <div id="catalogueSection" style="display:none !important;">
+        <div style="background:rgba(251, 146, 60, 0.1); border:1px solid rgba(251, 146, 60, 0.3); color:#c2410c; padding:8px; border-radius:6px; font-size:11px; margin-bottom:12px; text-align:center;">
+            🚧 <strong>Experimental Mode</strong>: Auditor features are currently in beta.
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="bulk-hint" style="margin:0;">Catalogue Setup</div>
+            <div id="catalogueLimitMsg" style="font-size:10px; color:var(--text-muted);">Limit: 10 (Free)</div>
+        </div>
+
+        <div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px dashed var(--border);">
+            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                <button id="triggerImportBtn" style="flex:1; padding:8px; font-size:11px; background:var(--primary); color:white; font-weight:bold; border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+                    📤 Import / Upload
+                </button>
+                <input type="file" id="catalogueInput" accept=".xlsx" style="display:none;">
+                <button id="downloadCatalogueTemplateBtn" style="flex:1; padding:8px; font-size:11px; background:var(--primary); color:white; font-weight:bold; border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+                    📥 Download Template
+                </button>
+            </div>
+            <div id="catalogueImportStatus" style="font-size:11px; color:var(--text-muted); text-align:center; min-height:16px;"></div>
+        </div>
+
+        <div style="display:flex; gap:6px; margin-bottom:12px; align-items:center;">
+            <select id="catalogueSelect" style="flex:1;"></select>
+            <button id="newCatalogueBtn" title="Create New Catalogue" aria-label="Create new catalogue" style="padding:6px; width:auto; flex:none;">➕</button>
+            <button id="renameCatalogueBtn" title="Rename Catalogue" aria-label="Rename current catalogue" style="padding:6px; width:auto; flex:none;">✏️</button>
+            <button id="deleteCatalogueBtn" title="Delete Catalogue" aria-label="Delete current catalogue" style="padding:6px; width:auto; flex:none; color:var(--danger);">🗑️</button>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+             <span style="font-size:11px; font-weight:600;">Items in Catalogue</span>
+             <button id="exportCatalogueBtn" style="background:transparent; border:none; color:var(--primary); font-size:10px; text-decoration:underline; cursor:pointer; padding:0; margin-right:8px;">Export Full</button>
+             <button id="clearCatalogueBtn" style="background:transparent; border:none; color:var(--danger); font-size:10px; text-decoration:underline; cursor:pointer; padding:0;">Clear Items</button>
+        </div>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 10px; font-weight: 700; padding: 4px 8px; color: var(--text-muted); border-bottom: 1px solid var(--border);">
+            <span>ASIN / TITLE</span>
+            <span style="text-align:center">LAST SCAN</span>
+            <span style="text-align:right">STATUS</span>
+        </div>
+        
+        <div id="catalogueItems" style="max-height: 250px; overflow-y: auto;">
+            <div style="padding:10px; text-align:center; color:var(--text-muted); font-size:11px;">Catalogue is empty.</div>
+        </div>
+        
+        <div id="catalogueCount" style="font-size:10px; color:var(--text-muted); text-align:right; margin: 8px 0;">0 Items</div>
+        <button id="auditCatalogueBtn" style="width: 100%; padding: 10px; font-size: 13px; font-weight: 700; border-radius: 6px;">
+             🛡️ AUDIT CATALOGUE
+        </button>
+    </div>
+
+    <!-- Scraping Configuration Container -->
+    <div id="scrapingConfig" class="options-container">
+      <div class="options-header">
+        <span>Scraping Configuration</span>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+            <input type="checkbox" id="selectAll" checked style="margin-right:4px;"> Select All
+        </label>
+      </div>
+      
+      <div id="attributesGrid" class="attributes-grid">
+        <div class="section-label">
+            <span>Executive Summary</span> 
+            <span class="lock-icon">🔒</span>
+        </div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature" value="lqs" checked disabled> Listing Quality Score</label></div>
+        <div></div>
+        <div class="section-label">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" class="group-select" data-group="core" checked>
+                <span>Core Data (Free)</span>
+            </div>
+        </div>
+        <!-- Left: Locked, Right: Unlocked -->
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="marketplace" checked disabled> Marketplace</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="brand" checked> Brand Name</label></div>
+        
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="queryASIN" checked disabled> Query ASIN</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="metaTitle" checked> Page Title</label></div>
+        
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="mediaAsin" checked disabled> Page ASIN</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="displayPrice" checked> Price</label></div>
+        
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="url" checked disabled> Page URL</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="rating" checked> Rating (Stars)</label></div>
+        
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="deliveryLocation" checked disabled> Delivery Location</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox group-core" value="reviews" checked> Review Count</label></div>
+
+        <div class="section-label">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" class="group-select" data-group="advanced" checked disabled>
+                <span>Advanced Data</span>
+                <span class="lock-icon">🔒</span>
+            </div>
+        </div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="parentAsin" checked disabled> Parent ASIN</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="stockStatus" checked disabled> Stock Status</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="soldBy" checked disabled> Sold By</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="bsr" checked disabled> Best Sellers Rank</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="freeDeliveryDate" checked disabled> Free Delivery</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="paidDeliveryDate" checked disabled> Paid Delivery</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="primeOrFastestDeliveryDate" checked disabled> Prime / Fastest</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-advanced" value="scrapeAOD" disabled> Offers (AOD)</label></div>
+
+        <div class="section-label">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" class="group-select" data-group="content" checked disabled>
+                <span>Content Assets</span>
+                <span class="lock-icon">🔒</span>
+            </div>
+        </div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="hasBullets" checked disabled> Has Bullet Points?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="bulletsCount" checked disabled> Bullet Count</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="bullets" checked disabled> Bullet Points</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="hasDescription" checked disabled> Has Description?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="description" checked disabled> Description</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="variationExists" checked disabled> Has Variations?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="variationTheme" checked disabled> Variation Theme</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="variationCount" checked disabled> Variation Quantity</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="variationFamily" checked disabled> Variation Child ASINs</label></div> 
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="hasBrandStory" checked disabled> Has Brand Story?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="brandStoryImgs" checked disabled> Brand Story Links</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="hasAplus" checked disabled> Has A+ Content?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="aPlusImgs" checked disabled> A+ Content Links</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="hasVideo" checked disabled> Has Video?</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="videoCount" checked disabled> Video Count</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="videos" checked disabled> Videos Links</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="imgVariantCount" checked disabled> Image Link Count</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="attr-checkbox pro-feature group-content" value="imgVariantDetails" checked disabled> Image Link Details</label></div>
+      </div>
+    </div>
+
+    <!-- NEW: Audit Configuration Container -->
+    <div id="auditConfig" class="options-container" style="display:none;">
+      <div class="options-header">
+        <span>Audit Configuration</span>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+            <input type="checkbox" id="auditSelectAll" checked style="margin-right:4px;"> Select All
+        </label>
+      </div>
+
+      <div class="attributes-grid">
+        <div class="section-label">
+            <span>Audit Points</span>
+        </div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditContent" checked> Content Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditGrowth" checked> Growth Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditImage" checked> Image Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditVideo" checked> Video Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditBrandStory" checked> Brand Story Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditAplus" checked> A+ Content Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditComparison" checked> Comparison Chart Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditVariation" checked> Variation Family Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditBuyBox" checked> BuyBox Ownership Audit</label></div>
+        <div class="checkbox-item"><label><input type="checkbox" class="audit-checkbox" value="auditDelivery" checked> Delivery Promise Audit</label></div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button id="scanBtn">Start Audit (Current Tabs)</button>
+      <button id="stopBtn">Stop Scanning</button>
+    </div>
+
+    <div id="progressContainer"><div id="progressBar"></div></div>
+    
+    <div style="text-align: center; margin-bottom: 12px;">
+        <div id="status" style="font-weight: 500; font-size: 12px; color: var(--text-muted);">Ready to scan.</div>
+        <div id="progressCount" style="font-size: 11px; color: var(--primary); font-weight: 600; display: none;">Processed: 0 / 0</div>
+    </div>
+    
+    <div id="dashboardView">
+      <div class="dash-card">
+        <div class="dash-label">Audited</div>
+        <div class="dash-value" id="statTotal">-</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">Avg LQS</div>
+        <div class="dash-value" id="statLqs">-</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">Issues</div>
+        <div class="dash-value bad" id="statIssues">-</div>
+      </div>
+    </div>
+
+    <div id="resultsPlaceholder" class="results-placeholder">
+        <div class="placeholder-icon">📊</div>
+        <div class="placeholder-text">
+            <strong>Ready to Audit</strong>
+            <p style="margin:4px 0;">Results will be summarized here after scanning.</p>
+            <p class="placeholder-hint">You can keep this panel open to monitor progress</p>
+        </div>
+    </div>
+    
+    <div style="display:flex; flex-direction: column; gap:8px;">
+        <div style="display:flex; gap:8px;">
+            <button id="previewBtn" class="action-btn" style="flex:1; margin-top:0; background:rgba(37,99,235,0.1); color:var(--primary); border-color:rgba(37,99,235,0.3);">👁️ Preview</button>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button id="downloadBtn" class="action-btn" style="flex:1; margin-top:0;">CSV</button>
+            <button id="downloadXlsxBtn" class="action-btn" style="flex:1; margin-top:0; background:rgba(34,197,94,0.1); color:var(--success); border-color:rgba(34,197,94,0.3);">XLSX (Pro)</button>
+        </div>
+        
+        <button id="downloadErrorsBtn" class="action-btn" style="margin-top:0; background:#fef2f2; color:#b91c1c; border-color:#fca5a5; display:none;">⚠️ Download Failed ASINs (CSV)</button>
+
+        <div style="display:flex; gap:8px;">
+            <button id="pushSheetBtn" class="action-btn" style="flex:1; margin-top:0; background:#f0fdf4; color:#15803d; border-color:#86efac; font-weight:700;">
+                Google Sheet
+            </button>
+            <button id="pushExcelBtn" class="action-btn" style="flex:1; margin-top:0; background:#f0f9ff; color:#0369a1; border-color:#7dd3fc; font-weight:700;">
+                Excel Online
+            </button>
+        </div>
+        
+        <div id="clearSection" style="display:none;">
+            <button id="clearBtn" class="action-btn" style="display:block; width:100%; background:var(--surface); border-color:var(--danger); color:var(--danger); margin-top:0;">Clear Output / Reset</button>
+            <div id="clearConfirmMsg" style="display:none; text-align:center; margin-top:4px; font-size:11px; color:var(--danger);">
+                <strong>Warning:</strong> Unsaved data will be lost.<br>
+            </div>
+        </div>
+    </div>
+
+    <div class="signature">
+        Created with ❤️ by TransFamesh <a id="feedbackLink">Feedback & Suggestions</a>
+    </div>
+  </div>
+
+  <dialog id="previewModal">
+      <div class="modal-header">
+          <span>Audit Preview</span>
+          <button id="closeModalBtn" aria-label="Close preview modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+      </div>
+      <div class="modal-footer">
+          <button id="modalDownloadBtn" class="auth-btn" style="background:var(--primary); color:white; width:auto; display:inline-flex;">Download XLSX</button>
+      </div>
+  </dialog>
+
+  <dialog id="chartModal">
+      <div class="modal-header">
+          <span>Price History</span>
+          <button id="closeChartBtn" aria-label="Close chart modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="height:300px; padding:10px;">
+          <canvas id="historyChart"></canvas>
+      </div>
+  </dialog>
+
+  <dialog id="inputModal">
+      <div class="modal-header">
+          <span id="inputModalTitle">Catalogue Name</span>
+          <button id="closeInputModalBtn" aria-label="Close input modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+          <input type="text" id="catalogueNameInput" placeholder="Enter name..." style="width: 100%; padding: 8px; box-sizing: border-box;">
+      </div>
+      <div class="modal-footer">
+          <button id="saveInputBtn" class="auth-btn" style="background:var(--primary); color:white; width:auto; display:inline-flex;">Save</button>
+      </div>
+  </dialog>
+
+  <dialog id="saveToCatalogueModal">
+      <div class="modal-header">
+          <span>Import to Catalogue</span>
+          <button id="closeSaveModalBtn" aria-label="Close save modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+          <p style="margin-top:0; font-size:12px; color:var(--text-muted);">Select where to save the imported items:</p>
+
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; cursor:pointer;">
+              <input type="radio" name="saveOption" value="new" checked>
+              <span style="font-weight:600;">Create New Catalogue</span>
+          </label>
+          <input type="text" id="newCatalogueNameInput" placeholder="Enter catalogue name..." style="width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 16px; margin-left: 24px; width: calc(100% - 24px);">
+
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; cursor:pointer;">
+              <input type="radio" name="saveOption" value="append">
+              <span style="font-weight:600;">Append to Existing</span>
+          </label>
+          <select id="appendCatalogueSelect" style="width: calc(100% - 24px); padding: 8px; margin-left: 24px;" disabled></select>
+      </div>
+      <div class="modal-footer">
+          <button id="confirmImportBtn" class="auth-btn" style="background:var(--success); color:white; width:auto; display:inline-flex;">Save & Load</button>
+      </div>
+  </dialog>
+
+  <dialog id="templateModal">
+      <div class="modal-header">
+          <span>Select Attributes to Track</span>
+          <button id="closeTemplateModalBtn" aria-label="Close template modal" style="flex:none; width:auto; background:transparent; border:none; color:var(--text-muted); font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+
+      <div class="options-header" style="border-top:none; background: var(--bg);">
+        <span>Configuration</span>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+            <input type="checkbox" id="tplSelectAll" checked style="margin-right:4px;"> Select All
+        </label>
+      </div>
+
+      <div class="modal-body" style="padding: 0;">
+        <div id="tplAttributesGrid" class="attributes-grid" style="max-height: 400px;">
+             <div class="section-label">
+                <span>Executive Summary</span>
+                <span class="lock-icon">🔒</span>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature" value="lqs" checked disabled> Listing Quality Score</label></div>
+            <div></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="core" checked>
+                    <span>Core Data (Free)</span>
+                </div>
+            </div>
+            <!-- Left: Locked, Right: Unlocked -->
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="marketplace" checked disabled> Marketplace</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="brand" checked> Brand Name</label></div>
+            
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="queryASIN" checked disabled> Query ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="metaTitle" checked> Page Title</label></div>
+            
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="mediaAsin" checked disabled> Page ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="displayPrice" checked> Price</label></div>
+            
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="url" checked disabled> Page URL</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="rating" checked> Rating (Stars)</label></div>
+            
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="deliveryLocation" checked disabled> Delivery Location</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox tpl-group-core" value="reviews" checked> Review Count</label></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="advanced" checked disabled>
+                    <span>Advanced Data</span>
+                    <span class="lock-icon">🔒</span>
+                </div>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="parentAsin" checked disabled> Parent ASIN</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="stockStatus" checked disabled> Stock Status</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="soldBy" checked disabled> Sold By</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="bsr" checked disabled> Best Sellers Rank</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="freeDeliveryDate" checked disabled> Free Delivery</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="paidDeliveryDate" checked disabled> Paid Delivery</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="primeOrFastestDeliveryDate" checked disabled> Prime / Fastest</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-advanced" value="scrapeAOD" disabled> Offers (AOD)</label></div>
+
+            <div class="section-label">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" class="tpl-group-select" data-group="content" checked disabled>
+                    <span>Content Audit</span>
+                    <span class="lock-icon">🔒</span>
+                </div>
+            </div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasBullets" checked disabled> Has Bullet Points?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="bulletsCount" checked disabled> Bullet Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="bullets" checked disabled> Bullet Points</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasDescription" checked disabled> Has Description?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="description" checked disabled> Description</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationExists" checked disabled> Has Variations?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationTheme" checked disabled> Variation Theme</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationCount" checked disabled> Variation Quantity</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="variationFamily" checked disabled> Variation Child ASINs</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasBrandStory" checked disabled> Has Brand Story?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="brandStoryImgs" checked disabled> Brand Story Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasAplus" checked disabled> Has A+ Content?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="aPlusImgs" checked disabled> A+ Content Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="hasVideo" checked disabled> Has Video?</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="videoCount" checked disabled> Video Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="videos" checked disabled> Videos Links</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="imgVariantCount" checked disabled> Image Link Count</label></div>
+            <div class="checkbox-item"><label><input type="checkbox" class="tpl-attr-checkbox pro-feature tpl-group-content" value="imgVariantDetails" checked disabled> Image Link Details</label></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+          <button id="saveTemplateBtn" class="auth-btn" style="background:var(--primary); color:white; width:auto; display:inline-flex;">Save Template</button>
+      </div>
+  </dialog>
+
+  <script src="chart.js"></script>
+  <script src="xlsx.full.min.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+  
+</body>
+</html>

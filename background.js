@@ -1,4 +1,8 @@
-// background.js - Robust Alarm-Based Batch Processing
+import { Auditor } from './src/Auditor.js';
+
+// background.js - Robust Batch Processing (Current Window)
+
+let currentAuditor = null;
 
 const INITIAL_STATE = {
   isScanning: false,
@@ -6,12 +10,20 @@ const INITIAL_STATE = {
   urlsToProcess: [],
   results: [],
   processedCount: 0,
-  currentBatchIndex: 0,
-  batchTabIds: [],      
   settings: { disableImages: false },
   statusMessage: "Ready.",
-  nextActionTime: null 
+  nextActionTime: null,
+  targetWindowId: null
 };
+
+// --- Initialization ---
+
+chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+      chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+          .catch((error) => console.error("SidePanel Error:", error));
+  }
+});
 
 // --- Event Listeners ---
 
@@ -36,62 +48,141 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   if (!state || !state.isScanning) return;
 
-  if (alarm.name === 'BATCH_OPEN') {
-    await openBatchTabs(state);
-  } 
-  else if (alarm.name === 'BATCH_EXTRACT') {
-    await extractBatchData(state);
+  if (alarm.name === 'QUEUE_PROCESS') {
+    await processBatch(state);
   }
 });
 
 // --- Core Functions ---
 
 async function startScan(payload) {
-  const { urls, mode, settings } = payload;
+  const { urls, mode, settings, targetWindowId } = payload;
   
+  // --- AUDITOR MODE LOGIC ---
+  if (mode === 'catalogue') {
+      const asins = urls.map(u => {
+          if(typeof u === 'string') return getAsinFromUrl(u);
+          return u.id || getAsinFromUrl(u.url);
+      }).filter(a => a !== 'none');
+      const uniqueAsins = [...new Set(asins)];
+
+      const newState = {
+        ...INITIAL_STATE,
+        isScanning: true,
+        mode,
+        urlsToProcess: uniqueAsins,
+        settings,
+        processedCount: 0,
+        statusMessage: "Initializing Auditor...",
+        targetWindowId
+      };
+      await chrome.storage.local.set({ auditState: newState });
+
+      if (currentAuditor && currentAuditor.isJobRunning) await currentAuditor.stop();
+
+      currentAuditor = new Auditor({
+          scraperPath: 'content.js',
+          onProgress: async (current, total, logs, startTime, results) => {
+               const data = await chrome.storage.local.get('auditState');
+               if(data.auditState && data.auditState.isScanning) {
+                   data.auditState.processedCount = current;
+                   data.auditState.statusMessage = logs;
+                   if (results) data.auditState.results = results;
+                   await chrome.storage.local.set({ auditState: data.auditState });
+               }
+          },
+          onComplete: async (results, status, logs) => {
+               const data = await chrome.storage.local.get('auditState');
+               if(data.auditState) {
+                   data.auditState.isScanning = false;
+                   data.auditState.results = results;
+                   data.auditState.statusMessage = logs;
+                   await chrome.storage.local.set({ auditState: data.auditState });
+                   try {
+                       chrome.runtime.sendMessage({
+                          action: 'SCAN_COMPLETE',
+                          mode: mode,
+                          results: results
+                       }).catch(()=>{});
+                   } catch(e){}
+               }
+               currentAuditor = null;
+          },
+          onError: (err) => {
+              console.error("Auditor Error", err);
+          }
+      });
+
+      // Domain Heuristic
+      let domain = "com";
+      if (urls.length > 0) {
+          const sampleUrl = typeof urls[0] === 'string' ? urls[0] : urls[0].url;
+          if (sampleUrl) {
+              const match = sampleUrl.match(/amazon\.([a-z\.]+)\//);
+              if (match) domain = match[1];
+          }
+      }
+      const vcBaseUrl = `https://vendorcentral.amazon.${domain}/imaging/manage?asins=`;
+
+      currentAuditor.start(uniqueAsins, domain, vcBaseUrl, 5, targetWindowId);
+      return;
+  }
+
+  // --- STANDARD SCRAPER LOGIC ---
+
   const newState = {
     ...INITIAL_STATE,
     isScanning: true,
     mode,
     urlsToProcess: urls,
     settings,
-    statusMessage: "Initializing..."
+    processedCount: 0,
+    statusMessage: "Initializing...",
+    targetWindowId
   };
 
   await chrome.storage.local.set({ auditState: newState });
 
+  // DNR Logic (Simplified: Enable/Disable Rules based on settings)
   if (settings.disableImages) {
-    await chrome.contentSettings.images.set({
-      primaryPattern: '*://*.amazon.com/*',
-      setting: 'block'
-    });
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+          enableRulesetIds: ["ruleset_1"]
+      });
+  } else {
+      // Ensure we don't accidentally block if not requested, though we might want to block ads
+      // For now, sticking to user setting toggling ruleset
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+          disableRulesetIds: ["ruleset_1"]
+      });
   }
 
-  createAlarm('BATCH_OPEN', 100); 
+  createAlarm('QUEUE_PROCESS', 100);
 }
 
 async function stopScan() {
   await chrome.alarms.clearAll();
 
+  if (currentAuditor) {
+      await currentAuditor.stop();
+      currentAuditor = null;
+  }
+
   const data = await chrome.storage.local.get('auditState');
   const state = data.auditState;
 
   if (state) {
-    if (state.batchTabIds && state.batchTabIds.length > 0) {
-      try { await chrome.tabs.remove(state.batchTabIds); } catch(e) {}
-    }
-    
     state.isScanning = false;
+    // Don't clear results, just mark as stopped so UI can render what we have
     state.statusMessage = "Stopped by user.";
-    state.batchTabIds = [];
     state.nextActionTime = null;
     await chrome.storage.local.set({ auditState: state });
-  }
 
-  await chrome.contentSettings.images.set({
-    primaryPattern: '*://*.amazon.com/*',
-    setting: 'allow'
-  });
+    if (state.settings && state.settings.disableImages) {
+        await chrome.declarativeNetRequest.updateEnabledRulesets({
+            disableRulesetIds: ["ruleset_1"]
+        });
+    }
+  }
 }
 
 async function clearData() {
@@ -104,48 +195,11 @@ async function clearData() {
     urlsToProcess: [],
     results: [],
     processedCount: 0,
-    currentBatchIndex: 0,
-    batchTabIds: [],
     statusMessage: "Results cleared. Ready.",
     nextActionTime: null
   };
 
   await chrome.storage.local.set({ auditState: clearedState });
-}
-
-async function openBatchTabs(state) {
-  const total = state.urlsToProcess.length;
-  
-  if (state.processedCount >= total) {
-    await finishScan(state);
-    return;
-  }
-
-  let currentBatchSize = getRandomDivisible(10, 30, 5); 
-  if (state.processedCount + currentBatchSize > total) {
-    currentBatchSize = total - state.processedCount;
-  }
-
-  const batchItems = state.urlsToProcess.slice(state.processedCount, state.processedCount + currentBatchSize);
-  const extractionTime = Date.now() + 5000;
-  
-  state.statusMessage = `Opening batch #${state.currentBatchIndex + 1} (${currentBatchSize} tabs)... Waiting for load.`;
-  state.nextActionTime = extractionTime; 
-  await chrome.storage.local.set({ auditState: state });
-
-  const tabIds = [];
-  for (const item of batchItems) {
-    try {
-      const url = item.url || item;
-      const tab = await chrome.tabs.create({ url: url, active: false });
-      tabIds.push(tab.id);
-    } catch(e) { console.error(e); }
-  }
-
-  state.batchTabIds = tabIds;
-  await chrome.storage.local.set({ auditState: state });
-
-  createAlarm('BATCH_EXTRACT', 5000); 
 }
 
 function getAsinFromUrl(url) {
@@ -154,103 +208,199 @@ function getAsinFromUrl(url) {
     return match ? match[1].toUpperCase() : "none";
 }
 
-async function extractBatchData(state) {
-  state.statusMessage = "Extracting data...";
-  state.nextActionTime = null;
-  await chrome.storage.local.set({ auditState: state });
+// --- BATCH PROCESSOR ---
 
-  const tabIds = state.batchTabIds || [];
-  const results = [];
-  const currentBatchSize = tabIds.length;
-  const batchItems = state.urlsToProcess.slice(state.processedCount, state.processedCount + currentBatchSize);
+async function processBatch(state) {
+    if (!state.isScanning) return;
 
-  let captchaDetected = false;
-  let captchaTabId = null;
+    const total = state.urlsToProcess.length;
+    const startIdx = state.processedCount;
 
-  const scriptPromises = tabIds.map(async (tabId, index) => {
-      const res = await extractFromTab(tabId);
-      const item = batchItems[index];
-      const originalUrl = item.url || item;
-      
-      if (res) {
-          if (res.error === "CAPTCHA_DETECTED") {
-              captchaDetected = true;
-              captchaTabId = tabId;
-              return null; // Don't add to results yet
-          }
+    // Check if finished
+    if (startIdx >= total) {
+        await finishScan(state);
+        return;
+    }
 
-          res.queryASIN = getAsinFromUrl(originalUrl);
-          
-          if (item.expected) {
-              res.expected = item.expected;
-          }
-          if (res.error && !res.url) {
-              res.url = originalUrl;
-          }
-      }
-      return res;
-  });
-  
-  const batchResults = await Promise.all(scriptPromises);
-  
-  // Smart Captcha Handling
-  if (captchaDetected && captchaTabId) {
-      // 1. Pause State
-      state.statusMessage = "CAPTCHA DETECTED! Paused. Please solve the captcha in the open tab to resume.";
-      state.isScanning = false; // Soft pause
-      await chrome.storage.local.set({ auditState: state });
+    // Random Batch Size (5-15) - Reduced Max
+    const minBatch = 5;
+    const maxBatch = 15;
+    const batchSize = Math.floor(Math.random() * (maxBatch - minBatch + 1)) + minBatch;
 
-      // 2. Focus the Tab
-      await chrome.tabs.update(captchaTabId, { active: true });
+    // Get Chunk
+    const endIdx = Math.min(startIdx + batchSize, total);
+    const chunk = state.urlsToProcess.slice(startIdx, endIdx);
 
-      // 3. Monitor for Resolution (Resume logic)
-      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
-          if (tabId === captchaTabId && changeInfo.status === 'complete') {
-              if (!tab.title.includes("Robot Check")) {
-                  // Captcha solved!
-                  chrome.tabs.onUpdated.removeListener(listener);
-                  
-                  // Resume: Set scanning true and re-trigger extraction for this batch immediately
-                  state.isScanning = true;
-                  state.statusMessage = "Captcha solved! Resuming...";
-                  chrome.storage.local.set({ auditState: state });
-                  
-                  // Give it 2 seconds to settle then extract
-                  createAlarm('BATCH_EXTRACT', 2000); 
-              }
-          }
-      });
-      
-      return; // Stop processing this batch until solved
-  }
-
-  // Normal Processing
-  batchResults.forEach(res => {
-    if (res && (res.found || res.error)) results.push(res);
-  });
-
-  if (tabIds.length > 0) {
-    try { await chrome.tabs.remove(tabIds); } catch(e) {}
-  }
-
-  state.results.push(...results);
-  state.processedCount += results.length; 
-  state.currentBatchIndex++;
-  state.batchTabIds = []; 
-
-  const total = state.urlsToProcess.length;
-  if (state.processedCount < total) {
-    const delaySeconds = getRandomDivisible(5, 30, 5); 
-    const nextRunTime = Date.now() + (delaySeconds * 1000);
-
-    state.statusMessage = `Cooling down for ${delaySeconds}s...`;
-    state.nextActionTime = nextRunTime;
+    state.statusMessage = `Processing ${startIdx + 1} - ${endIdx} of ${total} (Batch Size: ${batchSize})...`;
     await chrome.storage.local.set({ auditState: state });
 
-    createAlarm('BATCH_OPEN', delaySeconds * 1000);
-  } else {
-    await finishScan(state);
-  }
+    // Wait A: Random wait before opening batch (3-10s)
+    const waitA = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+    await new Promise(r => setTimeout(r, waitA));
+
+    // Track tabs created in this specific batch to ensure they are all closed
+    const batchTabIds = [];
+
+    // Helper to create tabs and track them for cleanup
+    const trackCreateTab = async (url) => {
+        try {
+            const createProps = { url: url, active: false };
+            if (state.targetWindowId) createProps.windowId = state.targetWindowId;
+            
+            const tab = await chrome.tabs.create(createProps);
+            if (tab) batchTabIds.push(tab.id);
+            return tab;
+        } catch (e) {
+            console.error("Tab Create Error:", e);
+            return null;
+        }
+    };
+
+    try {
+        // Parallel execution of the current batch
+        // We map the chunk items to auditSingleAsin promises
+        const chunkPromises = chunk.map(item => auditSingleAsin(item, state, trackCreateTab));
+        const chunkResults = await Promise.all(chunkPromises);
+
+        // Wait B: Random wait after processing/grabbing data (3-10s)
+        const waitB = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+        await new Promise(r => setTimeout(r, waitB));
+
+        // Update State with Results
+        state.results.push(...chunkResults);
+        state.processedCount += chunkResults.length;
+
+        await chrome.storage.local.set({ auditState: state });
+
+    } catch (err) {
+        console.error("Batch Error:", err);
+    } finally {
+        // MANDATORY CLEANUP: Close any tabs from this batch that might still be open
+        // This handles cases where a script might have crashed or hung
+        if (batchTabIds.length > 0) {
+            try {
+                // We attempt to remove any remaining tabs from this batch
+                // Most should be closed by auditSingleAsin, but this is a safety net
+                const currentTabs = await chrome.tabs.query({}); // Get all tabs to check existence
+                const existingIds = batchTabIds.filter(id => currentTabs.some(t => t.id === id));
+                if (existingIds.length > 0) await chrome.tabs.remove(existingIds);
+            } catch (e) {
+                // Tabs might already be closed, which is fine
+            }
+        }
+
+        // Schedule next batch with Random Delay (3-10s)
+        if (state.isScanning) {
+             const nextDelay = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+             createAlarm('QUEUE_PROCESS', nextDelay);
+        }
+    }
+}
+
+// --- Single Item Audit Logic ---
+
+async function auditSingleAsin(item, state, trackCreateTab) {
+    // Determine URL and Metadata
+    let url = (typeof item === 'string') ? item : (item.url || item);
+    let isVC = false;
+    let comparisonData = null;
+    let itemId = null;
+    let originalItem = item;
+
+    if (typeof item === 'object') {
+        if (item.type === 'vc') isVC = true;
+        // Legacy Vendor Logic
+        else if (state.mode === 'vendor' && item.asin && item.sku && item.vendorCode) {
+            isVC = true;
+            url = `https://vendorcentral.amazon.com/abis/listing/edit?sku=${item.sku}&asin=${item.asin}&vendorCode=${item.vendorCode}`;
+        }
+        comparisonData = item.comparisonData;
+        itemId = item.id;
+    }
+
+    // 1. Create Tab
+    const tab = await trackCreateTab(url);
+    if (!tab) return { error: "tab_create_failed", url: url };
+
+    try {
+        // 2. Wait for Load
+        await waitForTabLoad(tab.id);
+
+        // Wait C: "3-10 sec to grab data" simulation inside the tab interaction
+        const waitC = Math.floor(Math.random() * (10000 - 3000 + 1)) + 3000;
+        await new Promise(r => setTimeout(r, waitC));
+
+        // 3. Inject Flags (AOD, etc) if needed
+        if (state.settings && state.settings.scrapeAOD && !isVC) {
+            const strategy = state.settings.aodStrategy || 'all';
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (strat) => {
+                    window.SHOULD_SCRAPE_AOD = true;
+                    window.AOD_STRATEGY = strat;
+                },
+                args: [strategy]
+            }).catch(() => {}); // Ignore error if injection fails (e.g. closed tab)
+        }
+
+        // 4. Extract Data
+        const [result] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+        });
+
+        // Close tab immediately after extraction to free memory
+        chrome.tabs.remove(tab.id).catch(() => {}); 
+
+        if (result && result.result) {
+            const res = result.result;
+
+            // Handle Captcha
+            if (res.error === "CAPTCHA_DETECTED") {
+                return { error: "CAPTCHA_DETECTED", url: url };
+            }
+
+            // Attach Metadata
+            res.isVC = isVC;
+            res.comparisonData = comparisonData;
+            res.id = itemId;
+
+            if (isVC) {
+                if (originalItem && originalItem.asin && !originalItem.id) {
+                    res.vcData = originalItem;
+                }
+            } else {
+                res.queryASIN = getAsinFromUrl(url);
+                if (originalItem.expected) res.expected = originalItem.expected;
+            }
+
+            if (res.error && !res.url) res.url = url;
+            return res;
+        }
+
+        return { error: "no_result", url: url, queryASIN: getAsinFromUrl(url) };
+
+    } catch (e) {
+        // Attempt to close tab if crash occurred
+        chrome.tabs.remove(tab.id).catch(() => {}); 
+        return { error: "extraction_crash", url: url, details: e.toString() };
+    }
+}
+
+function waitForTabLoad(tabId) {
+    return new Promise((resolve) => {
+        // Timeout to prevent hanging forever
+        const timeout = setTimeout(() => resolve(), 30000);
+
+        const listener = (tid, changeInfo, tab) => {
+            if (tid === tabId && changeInfo.status === 'complete') {
+                clearTimeout(timeout);
+                chrome.tabs.onUpdated.removeListener(listener);
+                resolve();
+            }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+    });
 }
 
 async function finishScan(state) {
@@ -259,35 +409,22 @@ async function finishScan(state) {
   state.nextActionTime = null;
   await chrome.storage.local.set({ auditState: state });
 
+  // Notify frontend to update Catalogue status if applicable
+  try {
+      chrome.runtime.sendMessage({
+          action: 'SCAN_COMPLETE',
+          mode: state.mode,
+          results: state.results
+      }).catch(() => {}); // Ignore if no listener (e.g. sidepanel closed)
+  } catch(e) {}
+
   if (state.settings.disableImages) {
-    await chrome.contentSettings.images.set({
-      primaryPattern: '*://*.amazon.com/*',
-      setting: 'allow'
+    await chrome.declarativeNetRequest.updateEnabledRulesets({
+        disableRulesetIds: ["ruleset_1"]
     });
   }
 }
 
 function createAlarm(name, delayMs) {
   chrome.alarms.create(name, { when: Date.now() + delayMs });
-}
-
-async function extractFromTab(tabId) {
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      files: ['content.js']
-    });
-    if (result && result.result) {
-      return { tabId, ...result.result };
-    }
-  } catch (err) {
-    return { error: " extraction_failed", tabId };
-  }
-  return null;
-}
-
-function getRandomDivisible(min, max, step) {
-  const steps = Math.floor((max - min) / step);
-  const randomStep = Math.floor(Math.random() * (steps + 1));
-  return min + (randomStep * step);
 }
